@@ -92,13 +92,6 @@ class SequencingGenerator(object):
     ## TODO: allow setting of noise parameters
 
 
-  def _update_well_info(self):
-    ## TODO
-    pass
-  def _update_cell_info(self):
-    ## TODO
-    pass
-
   @staticmethod
   def generate_cells(self, reps, alpha_degree, beta_degree, alpha_start_idx=0, beta_start_idx=0):
     # alpha_degree: number of beta chains associated with each alpha chain
@@ -121,7 +114,7 @@ class SequencingGenerator(object):
     if distro == 'constant':
       return [params['cells_per_well']] * self.num_wells
     elif distro == 'poisson':
-      return None ## TODO
+      return list(nprand.poisson(params['lambda'], self.num_wells))
     elif distro == 'explicit':
       return params['cells_per_well']
     else:
@@ -132,15 +125,14 @@ class SequencingGenerator(object):
     distro = self.cell_frequency_distribution
     params = self.cell_frequency_distribution_params
     if distro == 'constant':
-      freqs = [1]*len(self.cells)
+      freqs = np.array([1]*len(self.cells))
     elif distro == 'power-law':
-      freqs = [1]*len(self.cells) ## TODO
+      freqs = nprand.power(params['alpha']+1, len(self.cells))
     elif distro == 'explicit':
-      freqs = params['frequencies']
+      freqs = np.array(params['frequencies'])
     else:
       assert False, "Unknown distribution of cell frequencies: {0}".format(distro)
 
-    freqs = np.array(freqs)
     freqs = freqs / np.sum(freqs) # Normalize freqs so it is a probability distro
     return freqs
 
@@ -151,7 +143,7 @@ class SequencingGenerator(object):
     well_data = []
     for cpw in cells_per_well:
       # Pick cpw cells based on distro in cell_freqs
-      # TODO: use trees to do this in O(log n) time instead of O(n)
+      # TODO: use trees to do this in O(log n) time?
       # (fyi: i actually don't know the efficiency of numpy's algorithm)
       cells = nprand.choice(self.cells, cpw, replace=True, p=cell_freqs)
 
