@@ -17,7 +17,8 @@ class SequencingGenerator(object):
       - cell_frequency_distribution [READ ONLY]
       - cell_frequency_distribution_params [READ ONLY]
       - set_cell_frequency_distribution()
-    TODO: add noise parameters
+    Noise stuff
+      - chain_misplacement_prob [READ/WRITE]
   """ 
 
   def __init__(self, **kwargs):
@@ -76,8 +77,12 @@ class SequencingGenerator(object):
 
 
   ## Noise parameters
-
-  ## TODO
+  # Probability that a chain will relocate to a random other well
+  @property
+  def chain_misplacement_prob(self):
+    return self._cmp
+  @chain_misplacement_prob.setter(self, prob):
+    self._cmp = prob
   
 
   def set_options(self, **kwargs):
@@ -89,7 +94,6 @@ class SequencingGenerator(object):
       self.cells = kwargs['cells']
     if 'cell_frequency_distribution' in kwargs and 'cell_frequency_distribution_params' in kwargs:
       self.set_cell_frequency_distribution(kwargs['cell_frequency_distribution'], **kwargs['cell_frequency_distribution_params'])
-    ## TODO: allow setting of noise parameters
 
 
   @staticmethod
@@ -139,7 +143,9 @@ class SequencingGenerator(object):
   def generate_sequencing_data(self, path):
     cells_per_well = self._sample_cells_per_well()
     cell_freqs = self._sample_cell_freqs()
-    
+
+    misplaced_alphas = []
+    misplaced_betas = []
     well_data = []
     for cpw in cells_per_well:
       # Pick cpw cells based on distro in cell_freqs
@@ -149,9 +155,25 @@ class SequencingGenerator(object):
 
       # Extract alpha and beta chains in the well
       alphas, betas = zip(*cells)
+
+      # Determine if any chains are misplaced
+      # If so, move them to the appropriate list of misplaced chains
+      for i in range(len(alphas)):
+        if nprand.uniform() < self.chain_misplacement_prob:
+          misplaced_alphas.append(alphas[i])
+          del alphas[i]
+      for i in range(len(betas)):
+        if nprand.uniform() < self.chain_misplacement_prob:
+          misplaced_betas.append(betas[i])
+          del betas[i]
+
       # Remove duplicate chains and add to well_data
       well_data.append([sorted(set(alphas)), sorted(set(betas))])
 
+    # Put misplaced chains in random wells
+    for a in misplaced_alphas:  well_data[nprand.randint(0, len(well_data))][0].append(a)
+    for b in misplaced_betas:  well_data[nprand.randint(0, len(well_data))][1].append(b)
+      
     metadata = {
       'num_wells': self.num_wells,
       'cells_per_well_distribution': self.cells_per_well_distribution,
