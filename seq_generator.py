@@ -1,4 +1,5 @@
-from numpy import random as nprand
+import itertools as it
+import numpy as np
 
 from seq_data import SequencingData
 
@@ -22,11 +23,16 @@ class SequencingGenerator(object):
   """ 
 
   def __init__(self, **kwargs):
+
     ## Set default parameter values
     self.num_wells = 96
-    self.set_cells_per_well(distro_type = 'constant', cells_per_well = 1)
+    self.set_cells_per_well(distro_type = 'constant', cells_per_well = 35)
     self.cells = SequencingGenerator.generate_cells(1000, 1, 1)
     self.set_cell_frequency_distribution(distro_type = 'power-law', alpha = -1)
+    self.chain_misplacement_prob = 0
+
+    ## If any parameters are specified in kwargs, modify them from the defaults
+    self.set_options(**kwargs)
 
 
   ## Well parameters
@@ -81,7 +87,8 @@ class SequencingGenerator(object):
   @property
   def chain_misplacement_prob(self):
     return self._cmp
-  @chain_misplacement_prob.setter(self, prob):
+  @chain_misplacement_prob.setter
+  def chain_misplacement_prob(self, prob):
     self._cmp = prob
   
 
@@ -94,10 +101,12 @@ class SequencingGenerator(object):
       self.cells = kwargs['cells']
     if 'cell_frequency_distribution' in kwargs and 'cell_frequency_distribution_params' in kwargs:
       self.set_cell_frequency_distribution(kwargs['cell_frequency_distribution'], **kwargs['cell_frequency_distribution_params'])
+    if 'chain_misplacement_prob' in kwargs:
+      self.chain_misplacement_prob = kwargs['chain_misplacement_prob']
 
 
   @staticmethod
-  def generate_cells(self, reps, alpha_degree, beta_degree, alpha_start_idx=0, beta_start_idx=0):
+  def generate_cells(reps, alpha_degree, beta_degree, alpha_start_idx=0, beta_start_idx=0):
     # alpha_degree: number of beta chains associated with each alpha chain
     # beta_degree: number of alpha chains associated with each beta chain
     # reps: number of iterations to run (total cells created = alpha_degree*beta_degree*reps)
@@ -108,6 +117,9 @@ class SequencingGenerator(object):
       alpha_indices = xrange(alpha_start_idx, alpha_start_idx+beta_degree)
       beta_indices = xrange(beta_start_idx, beta_start_idx+alpha_degree)
       cells.extend(it.product(alpha_indices, beta_indices))
+
+      alpha_start_idx += beta_degree
+      beta_start_idx += alpha_degree
     return cells
 
   def _sample_cells_per_well(self):
@@ -118,7 +130,7 @@ class SequencingGenerator(object):
     if distro == 'constant':
       return [params['cells_per_well']] * self.num_wells
     elif distro == 'poisson':
-      return list(nprand.poisson(params['lambda'], self.num_wells))
+      return list(np.random.poisson(params['lambda'], self.num_wells))
     elif distro == 'explicit':
       return params['cells_per_well']
     else:
@@ -131,16 +143,19 @@ class SequencingGenerator(object):
     if distro == 'constant':
       freqs = np.array([1]*len(self.cells))
     elif distro == 'power-law':
-      freqs = nprand.power(params['alpha']+1, len(self.cells))
+      freqs = np.random.pareto(-params['alpha'], len(self.cells)) ## TODO: there's something screwy abt this distro, talk to holec abt it
     elif distro == 'explicit':
       freqs = np.array(params['frequencies'])
     else:
       assert False, "Unknown distribution of cell frequencies: {0}".format(distro)
 
     freqs = freqs / np.sum(freqs) # Normalize freqs so it is a probability distro
-    return freqs
+    return list(freqs)
 
-  def generate_sequencing_data(self, path):
+  def generate_data(self):
+    # Generates sequencing data based on this SequencingGenerator object's parameter values.
+    # Results are returned in a SequencingData object, which can be saved to a file with seq_data.save()
+
     cells_per_well = self._sample_cells_per_well()
     cell_freqs = self._sample_cell_freqs()
 
@@ -150,8 +165,9 @@ class SequencingGenerator(object):
     for cpw in cells_per_well:
       # Pick cpw cells based on distro in cell_freqs
       # TODO: use trees to do this in O(log n) time?
-      # (fyi: i actually don't know the efficiency of numpy's algorithm)
-      cells = nprand.choice(self.cells, cpw, replace=True, p=cell_freqs)
+      # (tbh: i actually don't know the efficiency of numpy's algorithm)
+      cells_idx = np.random.choice(range(len(self.cells)), cpw, replace=True, p=cell_freqs)
+      cells = [self.cells[idx] for idx in cells_idx]
 
       # Extract alpha and beta chains in the well
       alphas, betas = zip(*cells)
@@ -159,11 +175,11 @@ class SequencingGenerator(object):
       # Determine if any chains are misplaced
       # If so, move them to the appropriate list of misplaced chains
       for i in range(len(alphas)):
-        if nprand.uniform() < self.chain_misplacement_prob:
+        if np.random.uniform() < self.chain_misplacement_prob:
           misplaced_alphas.append(alphas[i])
           del alphas[i]
       for i in range(len(betas)):
-        if nprand.uniform() < self.chain_misplacement_prob:
+        if np.random.uniform() < self.chain_misplacement_prob:
           misplaced_betas.append(betas[i])
           del betas[i]
 
@@ -171,8 +187,8 @@ class SequencingGenerator(object):
       well_data.append([sorted(set(alphas)), sorted(set(betas))])
 
     # Put misplaced chains in random wells
-    for a in misplaced_alphas:  well_data[nprand.randint(0, len(well_data))][0].append(a)
-    for b in misplaced_betas:  well_data[nprand.randint(0, len(well_data))][1].append(b)
+    for a in misplaced_alphas:  well_data[np.random.randint(0, len(well_data))][0].append(a)
+    for b in misplaced_betas:  well_data[np.random.randint(0, len(well_data))][1].append(b)
       
     metadata = {
       'num_wells': self.num_wells,
@@ -187,4 +203,4 @@ class SequencingGenerator(object):
       }
     }
     seq_data = SequencingData(well_data = well_data, metadata = metadata)
-    seq_data.save(path)
+    return seq_data
