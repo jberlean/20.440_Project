@@ -30,6 +30,7 @@ class SequencingGenerator(object):
     self.cells = SequencingGenerator.generate_cells(1000, 1, 1)
     self.set_cell_frequency_distribution(distro_type = 'power-law', alpha = -1)
     self.chain_misplacement_prob = 0
+    self.chain_deletion_prob = 0
 
     ## If any parameters are specified in kwargs, modify them from the defaults
     self.set_options(**kwargs)
@@ -90,19 +91,28 @@ class SequencingGenerator(object):
   @chain_misplacement_prob.setter
   def chain_misplacement_prob(self, prob):
     self._cmp = prob
+  # Probability that a chain will not be amplified properly (i.e. deleted)
+  @property
+  def chain_deletion_prob(self):
+    return self._cdp
+  @chain_deletion_prob.setter
+  def chain_deletion_prob(self, prob):
+    self._cdp = prob
   
 
   def set_options(self, **kwargs):
     if 'num_wells' in kwargs:
       self.num_wells = kwargs['num_wells']
     if 'cells_per_well_distribution' in kwargs and 'cells_per_well_distribution_params' in kwargs:
-      self.set_cells_per_well_distribution(kwargs['cells_per_well_distribution'], **kwargs['cells_per_well_distribution_params'])
+      self.set_cells_per_well(kwargs['cells_per_well_distribution'], **kwargs['cells_per_well_distribution_params'])
     if 'cells' in kwargs:
       self.cells = kwargs['cells']
     if 'cell_frequency_distribution' in kwargs and 'cell_frequency_distribution_params' in kwargs:
       self.set_cell_frequency_distribution(kwargs['cell_frequency_distribution'], **kwargs['cell_frequency_distribution_params'])
     if 'chain_misplacement_prob' in kwargs:
       self.chain_misplacement_prob = kwargs['chain_misplacement_prob']
+    if 'chain_deletion_prob' in kwargs:
+      self.chain_deletion_prob = kwargs['chain_deletion_prob']
 
 
   @staticmethod
@@ -175,11 +185,15 @@ class SequencingGenerator(object):
       # Determine if any chains are misplaced
       # If so, move them to the appropriate list of misplaced chains
       for i in range(len(alphas)):
-        if np.random.uniform() < self.chain_misplacement_prob:
+        if np.random.uniform() < self.chain_deletion_prob:
+          del alphas[i]
+        elif np.random.uniform() < self.chain_misplacement_prob:
           misplaced_alphas.append(alphas[i])
           del alphas[i]
       for i in range(len(betas)):
-        if np.random.uniform() < self.chain_misplacement_prob:
+        if np.random.uniform() < self.chain_deletion_prob:
+          del alphas[i]
+        elif np.random.uniform() < self.chain_misplacement_prob:
           misplaced_betas.append(betas[i])
           del betas[i]
 
