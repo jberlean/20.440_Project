@@ -140,7 +140,7 @@ class SequencingGenerator(object):
     if distro == 'constant':
       return [params['cells_per_well']] * self.num_wells
     elif distro == 'poisson':
-      return list(np.random.poisson(params['lambda'], self.num_wells))
+      return list(np.random.poisson(params['lam'], self.num_wells))
     elif distro == 'explicit':
       return params['cells_per_well']
     else:
@@ -181,6 +181,7 @@ class SequencingGenerator(object):
 
       # Extract alpha and beta chains in the well
       alphas, betas = zip(*cells)
+      alphas, betas = list(alphas), list(betas)
 
       # Determine if any chains are misplaced
       # If so, move them to the appropriate list of misplaced chains

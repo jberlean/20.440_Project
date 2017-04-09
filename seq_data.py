@@ -1,9 +1,12 @@
 import json
 
 class SequencingData(object):
-  def __init__(self, well_data=None, metadata=None):
-    self.well_data = well_data
-    self.metadata = metadata
+  def __init__(self, well_data=None, metadata=None, path=None):
+    if path is not None:
+      self.load_data(path)
+    else:
+      self.well_data = well_data
+      self.metadata = metadata
 
   def load_data(self, path):
     data = json.load(open(path, 'r'))
