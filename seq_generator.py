@@ -171,6 +171,7 @@ class SequencingGenerator(object):
 
     misplaced_alphas = []
     misplaced_betas = []
+    cells_per_well_idx = []
     well_data = []
     for cpw in cells_per_well:
       # Pick cpw cells based on distro in cell_freqs
@@ -201,6 +202,9 @@ class SequencingGenerator(object):
       # Remove duplicate chains and add to well_data
       well_data.append([sorted(set(alphas)), sorted(set(betas))])
 
+      # Store actual cells in well for metadata
+      cells_per_well_idx.append(cells_idx)
+
     # Put misplaced chains in random wells
     for a in misplaced_alphas:  well_data[np.random.randint(0, len(well_data))][0].append(a)
     for b in misplaced_betas:  well_data[np.random.randint(0, len(well_data))][1].append(b)
@@ -214,6 +218,7 @@ class SequencingGenerator(object):
       'cell_frequency_distribution_params': self.cell_frequency_distribution_params,
       'generated_data': {
         'cells_per_well': cells_per_well,
+        'cells_per_well_idx': cells_per_well_idx,
         'cell_frequencies': cell_freqs
       }
     }
