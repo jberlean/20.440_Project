@@ -11,6 +11,8 @@ def solve(seq_data, log_epsilon_prior = None, log_m_prior = None):
     if N_ax==N:  return 0.0
     f_w_ax = float(N_ax)/N
     f_w_a = float(N_a)/(N - N_ax)
+    #f_w_ax = float(N_ax+1)/(N+2)
+    #f_w_a = float(N_a+1)/(N - N_ax+2)
     f_c_ax = 1-(1-f_w_ax)**(1./n)
     f_c_a = 1-(1-f_w_a)**(1./n)
     return f_c_a/f_c_ax
@@ -62,8 +64,6 @@ def solve(seq_data, log_epsilon_prior = None, log_m_prior = None):
       new_likelihood = log_epsilon_prior(new_eps) + log_m_prior(m+1)
   
       # Check if it's time to go home
-      print m, cur_eps, new_eps
-      print cur_likelihood, new_likelihood
       if new_likelihood <= cur_likelihood:
         return new_pairs
 
@@ -131,13 +131,13 @@ def solve(seq_data, log_epsilon_prior = None, log_m_prior = None):
       a_idx = alphas_sorted[i]
       new_pairs = process_alpha_chain(a_idx, all_pairs, done_alphas, done_betas, well_data, cpw)
       done_alphas.add(a_idx)
-      print "New pairs for alpha chain {0}:".format(a_idx), [(all_alphas[a_idx],all_betas[b_idx]) for a_idx,b_idx in new_pairs]
+      #print "New pairs for alpha chain {0}:".format(a_idx), [(all_alphas[a_idx],all_betas[b_idx]) for a_idx,b_idx in new_pairs]
       i += 1
     else:
       b_idx = betas_sorted[j]
       new_pairs = process_beta_chain(b_idx, all_pairs, done_alphas, done_betas, well_data, cpw)
       done_betas.add(b_idx)
-      print "New pairs for beta chain {0}:".format(b_idx), [(all_alphas[a_idx],all_betas[b_idx]) for a_idx,b_idx in new_pairs]
+      #print "New pairs for beta chain {0}:".format(b_idx), [(all_alphas[a_idx],all_betas[b_idx]) for a_idx,b_idx in new_pairs]
       j += 1
     all_pairs |= set(new_pairs)
 
