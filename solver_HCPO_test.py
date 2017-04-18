@@ -57,10 +57,10 @@ def test_solver(data, **solver_kwargs):
 
   return pairs
 
-gen = SG(chain_deletion_prob=10**-1)
+gen = SG(chain_deletion_prob=10**-2)
 gen.num_wells = 1000
 gen.set_cells_per_well('constant', cells_per_well=100)
-gen.cells = SG.generate_cells(900, 1, 1) + SG.generate_cells(100, 2, 1, 900, 900)
+#gen.cells = SG.generate_cells(900, 1, 1) + SG.generate_cells(100, 2, 1, 900, 900)
 data = gen.generate_data()
 print_generator_args(gen)
 

@@ -61,7 +61,7 @@ def solve_simple_assignment(quals):
   # improving the assignment each time one is found.
   improving_transfers, nonimproving_transfers = enumerate_transfers(assignment)
   while len(improving_transfers) > 0:
-    transfer = improving_transfer[0]
+    transfer = improving_transfers[0]
     for i,j in transfer:
       assignment[i][j] = not assignment[i][j]
 
@@ -113,7 +113,9 @@ def solve_general_assignment(ratings):
 
   # Solve simple assignment problem until this solution solves the general assignment problem
   assignment, essential_rows, essential_cols = solve_corresponding_simple_assignment(u,v)
-  while not check_optimal_solution(assignment, essential_rows, essential_cols):
+  old_budget_tot = float('inf')
+  budget_tot = sum(u) + sum(v)
+  while not check_optimal_solution(assignment, essential_rows, essential_cols) and old_budget_tot > budget_tot:
     d = min([u[i]+v[j]-ratings[i][j] for i in range(len(essential_rows)) if not essential_rows[i] for j in range(len(essential_cols)) if not essential_cols[j]])
     min_u = min([u[i] for i in range(len(essential_rows)) if not essential_rows[i]])
     min_v = min([v[j] for j in range(len(essential_cols)) if not essential_cols[j]])
@@ -131,6 +133,9 @@ def solve_general_assignment(ratings):
         if not essential_cols[j]:  v[j] -= m
 
     assignment, essential_rows, essential_cols = solve_corresponding_simple_assignment(u,v)
-    
+
+    old_budget_tot = budget_tot
+    budget_tot = sum(u) + sum(v)
+
   return assignment, essential_rows, essential_cols
           
