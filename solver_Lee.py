@@ -68,4 +68,5 @@ def solve(seq_data, iters=100, wells_per_iter=100, pair_threshold = 0.9):
       overall_pairing_counts[pair] = overall_pairing_counts.get(pair, 0) + 1
 
   overall_good_pairs = [pair for pair in overall_pairing_counts if overall_pairing_counts[pair]>=pair_threshold*iters]
-  return overall_good_pairs
+
+  return [(all_alphas[a_idx], all_betas[b_idx]) for a_idx,b_idx in overall_good_pairs]
