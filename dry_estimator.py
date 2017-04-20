@@ -24,16 +24,16 @@ Main function execution (if file not imported, this will run)
 '''
 
 def main():
-    mcs = Multicell_Sequencing(w=1000,n=100)
-    mcs.build_repertoire(alpha=1.0,count=20000)
-    mcs.fs_logspace(-9,-1,40)
+    mcs = Multicell_Sequencing(w=96,n=1000,alpha=1.0,count=3000)
+    mcs.build_repertoire()
+    mcs.fs_logspace(-11,-1,101)
     fs,results = mcs.start_test()
 
     print 'Clone repertoires :',mcs.p[:10]
     print 'Clone repertoires:',mcs.p[-10:]
 
     visualize_1D(fs,results)
-    visualize_repertoire(mcs.p) 
+    #visualize_repertoire(mcs.p) 
 
 '''
 Factory methods
@@ -71,12 +71,14 @@ Function: Test for well properties of particular parameter sets
 '''
 
 class Multicell_Sequencing:
-    def __init__(self,w=1000,n=1000):
+    def __init__(self,w=1000,n=1000,alpha=1.,count=20000):
         self.w,self.n = w,n
+        self.alpha,self.count = float(alpha),int(count)
         self.p,self.fs = None,None
+        self.var = None
     
-    def build_repertoire(self,alpha=1,count=20000):
-        p = [(o+1)**-alpha for o in xrange(count)]
+    def build_repertoire(self):
+        p = [(o+1)**-self.alpha for o in xrange(self.count)]
         self.p = [i/sum(p) for i in p]
 
     def fs_linspace(self,start,stop,num=5):
@@ -84,6 +86,34 @@ class Multicell_Sequencing:
 
     def fs_logspace(self,start,stop,num=5):
         self.fs = np.logspace(start,stop,num) 
+
+    def var_logspace(self,var_name,start,stop,num=5):
+        self.var_name = var_name
+        self.var = np.logspace(start,stop,num)
+
+    def start_mass_test(self,silent=True):
+        if self.var_name is None:
+            print 'No variable defined for sensitivity!'
+            return None 
+
+        results = []
+        
+        # start iteration over variable for sensitivity
+        for v in self.var: 
+            if self.var_name == 'w': 
+                self.w = v
+            elif self.var_name == 'n':
+                self.n = v
+            elif self.var_name == 'alpha':
+                self.alpha = v 
+            elif self.var_name == 'count':
+                self.count = v
+
+            mcs.build_repertoire()
+            fs,res = mcs.start_test()
+            results.append(res)
+
+        return self.fs,self.var,results
 
     def start_test(self,silent=True):
         # check to make sure important sets are define
