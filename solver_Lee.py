@@ -1,4 +1,5 @@
 import random
+import sys
 
 def extract_chains(seq_data):
   alphas_per_well, betas_per_well = zip(*seq_data.well_data)
@@ -11,7 +12,7 @@ def solve(seq_data, iters=100, wells_per_iter=100, pair_threshold = 0.9):
     
     # Reformulate problem as a general assignment problem
     # Then apply Hungarian algorithm
-    ratings = [[scores[i][j] for j in beta_idx] for i in alpha_idx]
+    ratings = [[int(scores[i][j]*10000) for j in beta_idx] for i in alpha_idx]
     assignment, _, _ = solve_general_assignment(ratings)
 
     # Transform back into alpha- and beta-chain pairings
@@ -44,9 +45,10 @@ def solve(seq_data, iters=100, wells_per_iter=100, pair_threshold = 0.9):
   overall_pairing_counts = {}
   well_pairings = [None]*len(well_data)
   wells_per_iter = min(wells_per_iter, len(well_data))
+  percent_done = 0.0
   for i in range(iters):
-    # Choose set of <wells_per_iter> wells for this iteration
-    wells_idx = random.sample(range(len(well_data)), wells_per_iter)
+    # Choose random subset of wells for this iter
+    wells_idx = [i for i in range(len(well_data)) if random.random()>0.5]
 
     # Compute well pairings for any well, if it hasn't been done already
     # Then accumulate the number of times each pair has been assigned in a well pairing
@@ -54,6 +56,10 @@ def solve(seq_data, iters=100, wells_per_iter=100, pair_threshold = 0.9):
     for well_idx in wells_idx:
       if well_pairings[well_idx] == None:
         well_pairings[well_idx] = compute_well_pairings(*well_data[well_idx], scores=S)
+        percent_done += 100./len(well_pairings)
+        if int(percent_done)%2==0 and int(percent_done-100./len(well_pairings))%2!=0:
+          print "-",
+          sys.stdout.flush()
       for a,b in well_pairings[well_idx]:
         pairing_counts[(a,b)] = pairing_counts.get((a,b), 0) + 1
 
@@ -66,6 +72,7 @@ def solve(seq_data, iters=100, wells_per_iter=100, pair_threshold = 0.9):
     # For each pair exceeding the cutoff, increment the overall_pairing_counts number
     for pair in good_pairs:
       overall_pairing_counts[pair] = overall_pairing_counts.get(pair, 0) + 1
+  print
 
   overall_good_pairs = [pair for pair in overall_pairing_counts if overall_pairing_counts[pair]>=pair_threshold*iters]
 

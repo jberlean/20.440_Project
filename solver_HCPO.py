@@ -88,9 +88,9 @@ def solve(seq_data, log_epsilon_prior = None, log_m_prior = None):
     
 
   if log_epsilon_prior is None:
-    log_epsilon_prior = lambda x: -x*10**2
+    log_epsilon_prior = lambda x: -x*5
   if log_m_prior is None: # Note, this is not normalized
-    log_m_prior = lambda x: -100*math.log(x) if x>=1 else float('-inf')
+    log_m_prior = lambda x: -4*math.log(x) if x>=1 else float('-inf')
 
   # Extract # cells per well
   if seq_data.metadata['cells_per_well_distribution']=='constant':
