@@ -171,8 +171,10 @@ class SequencingGenerator(object):
 
     misplaced_alphas = []
     misplaced_betas = []
-    cells_per_well_idx = []
     well_data = []
+    cells_per_well_idx = []
+    chain_deletions = []
+    chain_misplacements = []
     for cpw in cells_per_well:
       # Pick cpw cells based on distro in cell_freqs
       # TODO: use trees to do this in O(log n) time?
@@ -181,29 +183,29 @@ class SequencingGenerator(object):
       cells = [self.cells[idx] for idx in cells_idx]
 
       # Extract alpha and beta chains in the well
-      alphas, betas = zip(*cells)
+      alphas, betas = zip(*cells) if len(cells)>0 else ([],[])
       alphas, betas = list(alphas), list(betas)
 
-      # Determine if any chains are misplaced
-      # If so, move them to the appropriate list of misplaced chains
-      for a in alphas:
-        if np.random.uniform() < self.chain_deletion_prob:
-          alphas.remove(a)
-        elif np.random.uniform() < self.chain_misplacement_prob:
-          misplaced_alphas.append(a)
-          alphas.remove(a)
-      for b in betas:
-        if np.random.uniform() < self.chain_deletion_prob:
-          betas.remove(b)
-        elif np.random.uniform() < self.chain_misplacement_prob:
-          misplaced_betas.append(b)
-          betas.remove(b)
+      # Apply chain deletions and chain misplacements
+      alphas_del_flag = [v<self.chain_deletion_prob for v in np.random.uniform(size=len(alphas))]
+      alphas_misp_flag = [v<self.chain_misplacement_prob for v in np.random.uniform(size=len(alphas))]
+      misplaced_alphas.extend([a for a,deleted,misplaced in zip(alphas, alphas_del_flag, alphas_misp_flag) if misplaced and not deleted])
+      alphas = [a for a,deleted,misplaced in zip(alphas, alphas_del_flag, alphas_misp_flag) if not deleted and not misplaced]
+
+      betas_del_flag = [v<self.chain_deletion_prob for v in np.random.uniform(size=len(betas))]
+      betas_misp_flag = [v<self.chain_misplacement_prob for v in np.random.uniform(size=len(betas))]
+      misplaced_betas.extend([b for b,deleted,misplaced in zip(betas, betas_del_flag, betas_misp_flag) if misplaced and not deleted])
+      betas = [b for b,deleted,misplaced in zip(betas, betas_del_flag, betas_misp_flag) if not deleted and not misplaced] 
 
       # Remove duplicate chains and add to well_data
       well_data.append([sorted(set(alphas)), sorted(set(betas))])
 
       # Store actual cells in well for metadata
       cells_per_well_idx.append(list(cells_idx))
+
+      # Store record of chain deletions and misplacements
+      chain_deletions.append((alphas_del_flag, betas_del_flag))
+      chain_misplacements.append((alphas_misp_flag, betas_misp_flag))
 
     # Put misplaced chains in random wells
     for a in misplaced_alphas:  well_data[np.random.randint(0, len(well_data))][0].append(a)
@@ -219,6 +221,8 @@ class SequencingGenerator(object):
       'generated_data': {
         'cells_per_well': cells_per_well,
         'cells_per_well_idx': cells_per_well_idx,
+        'chain_deletions_per_well': chain_deletions,
+        'chain_misplacements_per_well': chain_misplacements,
         'cell_frequencies': cell_freqs
       }
     }
