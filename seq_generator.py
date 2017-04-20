@@ -187,13 +187,13 @@ class SequencingGenerator(object):
       alphas, betas = list(alphas), list(betas)
 
       # Apply chain deletions and chain misplacements
-      alphas_del_flag = [v<self.chain_deletion_prob for v in np.random.uniform(size=len(alphas))]
-      alphas_misp_flag = [v<self.chain_misplacement_prob for v in np.random.uniform(size=len(alphas))]
+      alphas_del_flag = [bool(v<self.chain_deletion_prob) for v in np.random.uniform(size=len(alphas))]
+      alphas_misp_flag = [bool(v<self.chain_misplacement_prob) for v in np.random.uniform(size=len(alphas))]
       misplaced_alphas.extend([a for a,deleted,misplaced in zip(alphas, alphas_del_flag, alphas_misp_flag) if misplaced and not deleted])
       alphas = [a for a,deleted,misplaced in zip(alphas, alphas_del_flag, alphas_misp_flag) if not deleted and not misplaced]
 
-      betas_del_flag = [v<self.chain_deletion_prob for v in np.random.uniform(size=len(betas))]
-      betas_misp_flag = [v<self.chain_misplacement_prob for v in np.random.uniform(size=len(betas))]
+      betas_del_flag = [bool(v<self.chain_deletion_prob) for v in np.random.uniform(size=len(betas))]
+      betas_misp_flag = [bool(v<self.chain_misplacement_prob) for v in np.random.uniform(size=len(betas))]
       misplaced_betas.extend([b for b,deleted,misplaced in zip(betas, betas_del_flag, betas_misp_flag) if misplaced and not deleted])
       betas = [b for b,deleted,misplaced in zip(betas, betas_del_flag, betas_misp_flag) if not deleted and not misplaced] 
 
