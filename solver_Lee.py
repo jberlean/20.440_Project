@@ -71,7 +71,6 @@ def solve(seq_data, iters=100, wells_per_iter=100, pair_threshold = 0.9):
     # For each pair exceeding the cutoff, increment the overall_pairing_counts number
     for pair in good_pairs:
       overall_pairing_counts[pair] = overall_pairing_counts.get(pair, 0) + 1
-  print
 
   overall_good_pairs = [pair for pair in overall_pairing_counts if overall_pairing_counts[pair]>=pair_threshold*iters]
 
