@@ -1,6 +1,6 @@
 # Implement Hungarian algorithm
 
-def solve_simple_assignment(quals):
+def solve_simple_assignment(quals, initial = None):
   def compute_initial():
     # Find an initial assignment by simply using the first unassigned job in each row
     assignment = [[False for elem in row] for row in quals]
@@ -14,11 +14,15 @@ def solve_simple_assignment(quals):
     return assignment
 
   def enumerate_transfers(assignment):
-    # Determine all transfers using BFS (NOT the DFS proposed in the Kuhn 1955)
+    # Determine subset of all transfers using BFS (NOT the DFS proposed in the Kuhn 1955)
+    # Each row is only used in at most one transfer
+    # When an improving transfer is found, the function returns prematurely
 
     improving_transfers = []
     nonimproving_transfers = []
     incomplete_transfers = []
+
+    used_rows = [False]*len(assignment)
     
     # Find transfer starting locations
     for j in xrange(len(quals[0])):
@@ -36,26 +40,30 @@ def solve_simple_assignment(quals):
         i,j = transfer[-1]
         if all([not a for a in assignment[i]]):
           improving_transfers.append(transfer)
-          continue
+          return improving_transfers, nonimproving_transfers
+          #continue
         new_j = [new_j for new_j,a in enumerate(assignment[i]) if a][0]
         transfer.append((i,new_j))
 
         # Search this new column (new_j) for an unassigned row.
         # If none, the transfer is complete (but NOT an improvement)
         # For each unassigned row found, a new transfer to be extended is added to the growing list
-        used_rows = set([i for i,_ in transfer])
-        new_rows = [new_i for new_i in range(len(quals)) if quals[new_i][new_j] and new_i not in used_rows]
+        new_rows = [new_i for new_i in range(len(quals)) if quals[new_i][new_j] and not used_rows[new_i]]
         if len(new_rows) == 0:
           nonimproving_transfers.append(transfer)
         else:
-          new_incomplete_transfers.extend([transfer+[(new_i,new_j)] for new_i in new_rows])
+          for new_i in new_rows:
+            new_incomplete_transfers.append(transfer+[(new_i,new_j)])
+            used_rows[new_i] = True
       incomplete_transfers = new_incomplete_transfers
 
     return (improving_transfers, nonimproving_transfers)
-          
 
   # Determine initial assignments
-  assignment = compute_initial()
+  if initial is not None:
+    assignment = initial
+  else:
+    assignment = compute_initial()
 
   # Keep searching for improving transfers (i.e. transfers w/ odd # entries),
   # improving the assignment each time one is found.
@@ -83,7 +91,7 @@ def solve_simple_assignment(quals):
   return (assignment, essential_rows, essential_cols)
 
 def solve_general_assignment(ratings):
-  def compute_initial():
+  def compute_initial(ratings):
     a = [max(row) for row in ratings]
     b = [max([ratings[i][j] for i in range(len(ratings))]) for j in range(len(ratings[0]))]
 
@@ -92,7 +100,7 @@ def solve_general_assignment(ratings):
     else:
       return [0]*len(a), b
 
-  def solve_corresponding_simple_assignment(u, v):
+  def solve_corresponding_simple_assignment(ratings, u, v, init_assignment=None):
     # Compute the qualification matrix for the corresponding simple assignment problem,
     # given the budgets assigned to rows (u) and columns (v)
     quals = []
@@ -103,20 +111,27 @@ def solve_general_assignment(ratings):
       quals.append(q_row)
 
     # Solve simple assignment problem corresponding to this qualification matrix
-    return solve_simple_assignment(quals)
+    return solve_simple_assignment(quals, initial=init_assignment)
+
+  def check_optimal_solution(ratings, assignment, u, v):
+    assigned_rows = sum([any(row) for row in assignment])
+    return assigned_rows==len(ratings)
+
+  # Make ratings a square matrix
+  matrix_dim = max(len(ratings), len(ratings[0]))
+  add_rows = matrix_dim - len(ratings)
+  add_cols = matrix_dim - len(ratings[0])
+  ratings_aug = [row + [0]*add_cols for row in ratings] + [[0]*matrix_dim]*add_rows
 
   # Compute initial budget
-  u,v = compute_initial()
-
-  def check_optimal_solution(assignment, essential_rows, essential_cols):
-    return all(essential_rows) or all(essential_cols) ## not sure about this
+  u,v = compute_initial(ratings_aug)
 
   # Solve simple assignment problem until this solution solves the general assignment problem
-  assignment, essential_rows, essential_cols = solve_corresponding_simple_assignment(u,v)
+  assignment_aug, essential_rows, essential_cols = solve_corresponding_simple_assignment(ratings_aug, u,v)
   old_budget_tot = float('inf')
   budget_tot = sum(u) + sum(v)
-  while not check_optimal_solution(assignment, essential_rows, essential_cols) and old_budget_tot > budget_tot:
-    d = min([u[i]+v[j]-ratings[i][j] for i in range(len(essential_rows)) if not essential_rows[i] for j in range(len(essential_cols)) if not essential_cols[j]])
+  while not check_optimal_solution(ratings_aug, assignment_aug, u, v):
+    d = min([u[i]+v[j]-ratings_aug[i][j] for i in range(len(essential_rows)) if not essential_rows[i] for j in range(len(essential_cols)) if not essential_cols[j]])
     min_u = min([u[i] for i in range(len(essential_rows)) if not essential_rows[i]])
     min_v = min([v[j] for j in range(len(essential_cols)) if not essential_cols[j]])
     if min_u > 0:
@@ -132,10 +147,14 @@ def solve_general_assignment(ratings):
       for j in range(len(essential_cols)):
         if not essential_cols[j]:  v[j] -= m
 
-    assignment, essential_rows, essential_cols = solve_corresponding_simple_assignment(u,v)
+    assignment_aug, essential_rows, essential_cols = solve_corresponding_simple_assignment(ratings_aug, u,v, assignment_aug)
 
     old_budget_tot = budget_tot
     budget_tot = sum(u) + sum(v)
 
-  return assignment, essential_rows, essential_cols
+  # Remove extra rows from assignment matrix
+  assignment = [[assignment_aug[i][j] for j in range(len(ratings[0]))] for i in range(len(ratings))]
+  #print "Hungarian algorithm complete: sum(weights) = {0}; sum(budget) = {1}".format(sum([ratings[i][j] for i in range(len(assignment)) for j in range(len(assignment[i])) if assignment[i][j]]), sum(u)+sum(v))
+
+  return assignment
           

@@ -13,7 +13,7 @@ def solve(seq_data, iters=100, wells_per_iter=100, pair_threshold = 0.9):
     # Reformulate problem as a general assignment problem
     # Then apply Hungarian algorithm
     ratings = [[int(scores[i][j]*10000) for j in beta_idx] for i in alpha_idx]
-    assignment, _, _ = solve_general_assignment(ratings)
+    assignment = solve_general_assignment(ratings)
 
     # Transform back into alpha- and beta-chain pairings
     pairings = []
@@ -57,9 +57,8 @@ def solve(seq_data, iters=100, wells_per_iter=100, pair_threshold = 0.9):
       if well_pairings[well_idx] == None:
         well_pairings[well_idx] = compute_well_pairings(*well_data[well_idx], scores=S)
         percent_done += 100./len(well_pairings)
-        if int(percent_done)%2==0 and int(percent_done-100./len(well_pairings))%2!=0:
-          print "-",
-          sys.stdout.flush()
+        print "{0}%\r".format(int(percent_done)),
+        sys.stdout.flush()
       for a,b in well_pairings[well_idx]:
         pairing_counts[(a,b)] = pairing_counts.get((a,b), 0) + 1
 
