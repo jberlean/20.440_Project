@@ -5,7 +5,7 @@ def extract_chains(seq_data):
   alphas_per_well, betas_per_well = zip(*seq_data.well_data)
   return sorted(set(sum(alphas_per_well, []))), sorted(set(sum(betas_per_well, [])))
 
-def solve(seq_data, iters=100, wells_per_iter=100, pair_threshold = 0.9):
+def solve(seq_data, iters=100, pair_threshold = 0.9):
   ## Computes a solution to the alpha-beta pairing problem, using the methods in Lee et al. (2017)
   def compute_well_pairings(alpha_idx, beta_idx, scores):
     from hungarian import solve_general_assignment
@@ -44,7 +44,6 @@ def solve(seq_data, iters=100, wells_per_iter=100, pair_threshold = 0.9):
 
   overall_pairing_counts = {}
   well_pairings = [None]*len(well_data)
-  wells_per_iter = min(wells_per_iter, len(well_data))
   percent_done = 0.0
   for i in range(iters):
     # Choose random subset of wells for this iter

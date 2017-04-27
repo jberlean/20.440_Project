@@ -60,41 +60,44 @@ def test_solver(data, **solver_kwargs):
 
   return pairs
 
+def generate_cells(num_cells, max_alphas=None, max_betas=None):
+  if max_alphas == None:  max_alphas = num_cells
+  if max_betas == None:  max_betas = num_cells
+
+  # Generate the degree for each alpha- and beta-chain from a given distribution
+  sharing_probs=[0.8375, 0.0805, 0.029, 0.013, 0.021, 0.0025, 0.0165] # Averages from the Lee et al. paper
+  adegs = np.random.choice(range(1,8), max_alphas, replace=True, p=sharing_probs)
+  bdegs = np.random.choice(range(1,8), max_betas, replace=True, p=sharing_probs)
+  
+  # If you want to generate from a power law instead (not sure if this works as expected)
+  #adegs = np.floor(np.random.pareto(2.1, size=max_alphas))+1
+  #bdegs = np.floor(np.random.pareto(2.1, size=max_alphas))+1
+
+  # Cut off at the desired number of cells
+  alphas = sum([[i]*int(n) for i,n in enumerate(adegs)],[])[:num_cells] # this truncation will skew the distro a bit
+  betas = sum([[i]*int(n) for i,n in enumerate(bdegs)], [])[:num_cells]
+
+  # Randomly assign alpha- and beta-chains to each other
+  np.random.shuffle(alphas)
+  np.random.shuffle(betas)
+  cells = list(set(zip(alphas, betas))) # Due to chance duplicates, there may be slightly less than num_cells cells
+  # (A slightly more complex method could be used to ensure exactly num_cells cells)
+
+  return cells
+  
+
+# Make SequencingGenerator object
 gen = SG()
 gen.chain_deletion_prob=10**-1
 gen.num_wells = 1000
 gen.set_cells_per_well('poisson', lam=100)
+gen.cells = generate_cells(1000)
 
-num_cells = 1000
-max_alphas = 1000
-max_betas = 1000
-
-#adegs = np.floor(np.random.pareto(2.1, size=max_alphas))+1
-#bdegs = np.floor(np.random.pareto(2.1, size=max_alphas))+1
-sharing_probs=[0.8375, 0.0805, 0.029, 0.013, 0.021, 0.0025, 0.0165]
-adegs = np.random.choice(range(1,8), max_alphas, replace=True, p=sharing_probs)
-bdegs = np.random.choice(range(1,8), max_betas, replace=True, p=sharing_probs)
-
-alphas = sum([[i]*int(n) for i,n in enumerate(adegs)],[])[:num_cells] # this truncation will skew the distro a bit
-betas = sum([[i]*int(n) for i,n in enumerate(bdegs)], [])[:num_cells]
-np.random.shuffle(alphas)
-np.random.shuffle(betas)
-cells = list(set(zip(alphas, betas)))
-
-#cells = []
-#a_idx, b_idx = 0,0
-#adegs = []
-#while len(cells) < 1000:
-#  adeg = int(np.random.pareto(1)) + 1
-#  bdeg = int(np.random.pareto(1)) + 1
-#  cells += SG.generate_cells(int(np.random.pareto(adeg*bdeg)), adeg, bdeg, a_idx, b_idx)
-#  a_idx += bdeg
-#  b_idx += adeg
-gen.cells = cells[:1000]
+# Generate data and print statistics
 data = gen.generate_data()
 print_generator_args(gen)
 
+# Run solver with different arguments
 pairs1 = test_solver(data)
-pairs2 = test_solver(data, wells_per_iter=50)
-pairs3 = test_solver(data, wells_per_iter=50, pair_threshold=.6)
-pairs4 = test_solver(data, wells_per_iter=90, pair_threshold=.1)
+pairs2 = test_solver(data, pair_threshold=.6)
+pairs3 = test_solver(data, pair_threshold=.1)
