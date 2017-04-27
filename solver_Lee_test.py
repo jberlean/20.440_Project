@@ -1,5 +1,7 @@
 import sys
 
+import numpy as np
+
 from solver_Lee import solve
 from seq_data import SequencingData as SD
 from seq_generator import SequencingGenerator as SG
@@ -59,10 +61,36 @@ def test_solver(data, **solver_kwargs):
   return pairs
 
 gen = SG()
-gen.chain_deletion_prob=10**-2
+gen.chain_deletion_prob=10**-1
 gen.num_wells = 1000
-gen.set_cells_per_well('constant', cells_per_well=35)
-#gen.cells = SG.generate_cells(900, 1, 1) + SG.generate_cells(100, 2, 1, 900, 900)
+gen.set_cells_per_well('poisson', lam=100)
+
+num_cells = 1000
+max_alphas = 1000
+max_betas = 1000
+
+#adegs = np.floor(np.random.pareto(2.1, size=max_alphas))+1
+#bdegs = np.floor(np.random.pareto(2.1, size=max_alphas))+1
+sharing_probs=[0.8375, 0.0805, 0.029, 0.013, 0.021, 0.0025, 0.0165]
+adegs = np.random.choice(range(1,8), max_alphas, replace=True, p=sharing_probs)
+bdegs = np.random.choice(range(1,8), max_betas, replace=True, p=sharing_probs)
+
+alphas = sum([[i]*int(n) for i,n in enumerate(adegs)],[])[:num_cells] # this truncation will skew the distro a bit
+betas = sum([[i]*int(n) for i,n in enumerate(bdegs)], [])[:num_cells]
+np.random.shuffle(alphas)
+np.random.shuffle(betas)
+cells = list(set(zip(alphas, betas)))
+
+#cells = []
+#a_idx, b_idx = 0,0
+#adegs = []
+#while len(cells) < 1000:
+#  adeg = int(np.random.pareto(1)) + 1
+#  bdeg = int(np.random.pareto(1)) + 1
+#  cells += SG.generate_cells(int(np.random.pareto(adeg*bdeg)), adeg, bdeg, a_idx, b_idx)
+#  a_idx += bdeg
+#  b_idx += adeg
+gen.cells = cells[:1000]
 data = gen.generate_data()
 print_generator_args(gen)
 
