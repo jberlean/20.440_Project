@@ -28,7 +28,8 @@ def print_generator_args(gen):
 
   
 def test_solver(data, **solver_kwargs):
-  pairs = solve(data, **solver_kwargs)
+  results = solve(data, **solver_kwargs)
+  pairs = results['cells']
   
   print "Solved with the following optional arguments:"
   for k,v in solver_kwargs.iteritems():
@@ -45,6 +46,11 @@ def test_solver(data, **solver_kwargs):
   correct_pairs = [p for p in pairs if p in cells_set]
   incorrect_pairs = [p for p in pairs if p not in cells_set]
 
+  pair_idxs = [cells.index(p) if p in cells else -1 for p in pairs]
+  actual_freqs = [data.metadata['generated_data']['cell_frequencies'][i] if i!=-1 else 0.0 for i in pair_idxs]
+  pred_freqs = results['cell_frequencies']
+  pred_freqs_CI = results['cell_frequencies_CI']
+
   print "Solution statistics:"
   print "  Total cells (in system):", len(cells)
   print "  Number of alpha chains (in system):", len(all_alphas)
@@ -55,10 +61,12 @@ def test_solver(data, **solver_kwargs):
   print "  Correct pairs identified: {0} ({1}%)".format(len(correct_pairs), 100.*len(correct_pairs)/len(cells))
   print "  Incorrect pairs identified: {0}".format(len(incorrect_pairs))
   print "  False discovery rate: {0}%".format(100.*len(incorrect_pairs)/len(pairs))
+  print "  Mean squared error of frequency guesses: {0}".format(np.mean([(f1-f2)**2 for f1,f2 in zip(actual_freqs, pred_freqs)]))
+  print "  Percent of frequencies within confidence interval: {0}%".format(100.*np.mean([(f>=f_min and f<=f_max) for f,(f_min,f_max) in zip(actual_freqs, pred_freqs_CI)]))
 
   print
 
-  return pairs
+  return results
 
 def generate_cells(num_cells, max_alphas=None, max_betas=None):
   if max_alphas == None:  max_alphas = num_cells
@@ -98,6 +106,6 @@ data = gen.generate_data()
 print_generator_args(gen)
 
 # Run solver with different arguments
-pairs1 = test_solver(data)
-pairs2 = test_solver(data, pair_threshold=.6)
-pairs3 = test_solver(data, pair_threshold=.1)
+res1 = test_solver(data)
+res2 = test_solver(data, pair_threshold=.6)
+res3 = test_solver(data, pair_threshold=.1)
