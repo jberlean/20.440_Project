@@ -18,6 +18,7 @@ import time
 
 # nonstandard libraries
 import numpy as np
+import scipy.misc
 #import matplotlib.pyplot as plt
 #from seq_generator import SequencingGenerator as SeqGen
 #from seq_data import SequencingData
@@ -27,13 +28,17 @@ import numpy as np
 Factory Methods
 '''
 
-# N choose K
-def nCk(n, r):
+# N choose K (OUTDATED, slower by ~25x)
+def nCk_old(n, r):
     r = min(r, n-r)
     if r == 0: return 1
     numer = reduce(op.mul, xrange(n, n-r, -1))
     denom = reduce(op.mul, xrange(1, r+1))
     return numer//denom
+
+# N choose K
+def nCk(n, r):
+    return scipy.misc.comb(n,r)
     
 '''
 Frequency Estimators
@@ -91,10 +96,12 @@ def self_occurence(v):
     return temp
 
 def match_score(w_ab,w_a,w_b,w_tot):
-    if w_ab == 0: return 0.
+    if w_ab == 0: 
+        return 0.,0.
     else:
         mp,nmp = match_probability(w_ab,w_a,w_b,w_tot),nonmatch_probability(w_ab,w_a,w_b,w_tot)
-        return (10**mp)/(10**mp+10**nmp)
+        f_ab,_,_ = match_frequency(w_ab,w_a,w_b,w_tot)
+        return (10**mp)/(10**mp+10**nmp),f_ab
 
 def possible_matches(real_matches,img_ab,a_uniques,b_uniques):
     w_ab = np.sum(img_ab[:,:,:],axis=2)
@@ -138,10 +145,18 @@ Returns:
         description: list of tuples (a label,b label)
         
 '''
+# TODO: reduce image dimensions to 2D
+# TODO: use sparse matrices
 def directional_matches(img_ab,img_a,img_b,a_uniques,b_uniques,threshold=0.99,silent=False):
     score = np.zeros((len(a_uniques),len(b_uniques)))
-    w_tot = img_ab.shape[2]
+    frequency = np.zeros((len(a_uniques),len(b_uniques)))
+    
+    # important storage variables
     predicted_ab = []
+    predicted_frequency = []
+    predicted_score = []
+    
+    w_tot = img_ab.shape[2]
 
     for i in xrange(img_ab.shape[0]):
 
@@ -160,17 +175,18 @@ def directional_matches(img_ab,img_a,img_b,a_uniques,b_uniques,threshold=0.99,si
                 n_ab = w_ab[i,j]
                 n_a,n_b = w_a[i] - n_ab,w_b[j] - n_ab
                 n_tot = len(unexplained_wells)
-                score[i,j] = match_score(n_ab,n_a,n_b,n_tot)
+                score[i,j],frequency[i,j] = match_score(n_ab,n_a,n_b,n_tot)
 
             # find best pair to add
             j = np.argmax(np.nan_to_num(score[i,:]))
 
             # check if the score is passable
             if score[i,j] > threshold:
-                predicted_ab.append((a_uniques[i],b_uniques[j]))
+                predicted_ab.append((a_uniques[i],b_uniques[j])) # add edge!
+                predicted_frequency.append(frequency[i,j]) # add ab frequency!
+                predicted_score.append(score[i,j]) # add confidence!
                 explained_wells = [k for k in xrange(w_tot) if img_ab[i,j,k] == 1]
                 unexplained_wells = [item for item in unexplained_wells if item not in explained_wells]
-                predicted_ab.append((a_uniques[i],b_uniques[j]))
                 if not silent:
                     n_ab = w_ab[i,j]
                     n_a,n_b = w_a[i] - n_ab,w_b[j] - n_ab
@@ -182,38 +198,43 @@ def directional_matches(img_ab,img_a,img_b,a_uniques,b_uniques,threshold=0.99,si
                 if not silent: print 'No more sufficient matches found for ({}), exiting...\n'.format(a_uniques[i])
                 break
 
-    return predicted_ab # returns edges
-
-def generate_cells(num_cells, max_alphas=None, max_betas=None):
-    if max_alphas == None:  max_alphas = num_cells
-    if max_betas == None:  max_betas = num_cells
-
-    # Generate the degree for each alpha- and beta-chain from a given distribution
-    sharing_probs=[0.8375, 0.0805, 0.029, 0.013, 0.021, 0.0025, 0.0165] # Averages from the Lee et al. paper
-    adegs = np.random.choice(range(1,8), max_alphas, replace=True, p=sharing_probs)
-    bdegs = np.random.choice(range(1,8), max_betas, replace=True, p=sharing_probs)
-
-    # If you want to generate from a power law instead (not sure if this works as expected)
-    #adegs = np.floor(np.random.pareto(2.1, size=max_alphas))+1
-    #bdegs = np.floor(np.random.pareto(2.1, size=max_alphas))+1
-
-    # Cut off at the desired number of cells
-    alphas = sum([[i]*int(n) for i,n in enumerate(adegs)],[])[:num_cells] # this truncation will skew the distro a bit
-    betas = sum([[i]*int(n) for i,n in enumerate(bdegs)], [])[:num_cells]
-
-    # Randomly assign alpha- and beta-chains to each other
-    np.random.shuffle(alphas)
-    np.random.shuffle(betas)
-    cells = list(set(zip(alphas, betas))) # Due to chance duplicates, there may be slightly less than num_cells cells
-    # (A slightly more complex method could be used to ensure exactly num_cells cells)
-
-    return cells
+    return predicted_ab,predicted_frequency,predicted_score # returns edges
 
 
+def reduce_graph(all_edges,all_freqs,all_scores,all_uniques):
+    # implicitly assumes order of sets in: [ab,ba,aa,bb]
+
+
+    # initialize critical variables
+    edges,freqs,scores = [],[],[]
+
+    # TODO: add aa/bb solver ( this is non-trivial math )
+    #a_clones,b_uniques = [(i) for i in all_uniques[0]],[(i) for i in all_uniques[1]]
+    
+    ab_edges = all_edges[0]
+    ab_edges_rev = [(a[1],a[0]) for a in all_edges[1]] # create symmetrical order
+    
+    predicted_ab_matches = list(set(ab_edges).intersection(ab_edges_rev))
+
+    for i,ab in enumerate(predicted_ab_matches):
+        edges.append(ab)
+        freqs.append(np.mean((all_freqs[0][ab_edges.index(ab)],all_freqs[1][ab_edges_rev.index(ab)])))
+        scores.append(all_scores[0][ab_edges.index(ab)]*all_scores[1][ab_edges_rev.index(ab)])
+        
+    results = dict()
+    results['cells'] = edges
+    results['cell_frequencies'] = freqs
+    results['cell_frequencies_CI'] = scores
+
+    return results
+
+    # implicitly assumes order of sets in: [ab,ba,aa,bb]
+    
 
 '''
 The Meat-and-Potatoes Function
 '''
+# TODO: verbose levels
 def solve(data,pair_threshold = 0.99,silent=False):
     # find uniques
     a_uniques = list(set([a for well in data.well_data for a in well[0]]))
@@ -224,8 +245,8 @@ def solve(data,pair_threshold = 0.99,silent=False):
     sorted(b_uniques,key=int)
 
     # counts of each unique in wells
-    w_a = [float(sum([1 for well in data.well_data if i in well[0]])) for i in a_uniques] 
-    w_b = [float(sum([1 for well in data.well_data if i in well[1]])) for i in b_uniques]
+    #w_a = [float(sum([1 for well in data.well_data if i in well[0]])) for i in a_uniques] 
+    #w_b = [float(sum([1 for well in data.well_data if i in well[1]])) for i in b_uniques]
 
     img_ab,img_ba,img_aa,img_bb = None,None,None,None
     img_a = None
@@ -253,32 +274,43 @@ def solve(data,pair_threshold = 0.99,silent=False):
             img_a = np.hstack((img_a,a_v))
             img_b = np.hstack((img_b,b_v))
 
-
-
-    real_matches = data.metadata['cells']
-
+    # Setupt threshold values (TODO: better way to distinguish ab,ba from aa,bb
     t = pair_threshold
     t_shared = 1 - (1 - pair_threshold)**2
-
-    ab_edges = directional_matches(img_ab,img_a,img_b,a_uniques,b_uniques,threshold=t,silent = silent)
+            
+    # Find each type of available edge
+    ab_edges,ab_freqs,ab_scores = directional_matches(
+        img_ab,img_a,img_b,a_uniques,b_uniques,threshold=t,silent=silent)
     if not silent: print 'Finished AB edges!'
-    ba_edges = directional_matches(img_ba,img_b,img_a,b_uniques,a_uniques,threshold=t,silent = silent)
+        
+    ba_edges,ba_freqs,ba_scores = directional_matches(
+        img_ba,img_b,img_a,b_uniques,a_uniques,threshold=t,silent=silent)
     if not silent: print 'Finished BA edges!'
-    aa_edges = directional_matches(img_aa,img_a,img_a,a_uniques,a_uniques,threshold=t_shared,silent = silent)
+        
+    aa_edges,aa_freqs,aa_scores = directional_matches(
+        img_aa,img_a,img_a,a_uniques,a_uniques,threshold=t_shared,silent=silent)
     if not silent: print 'Finished AA edges!'
-    bb_edges = directional_matches(img_bb,img_b,img_b,b_uniques,b_uniques,threshold=t_shared,silent = silent)
+        
+    bb_edges,bb_freqs,bb_scores = directional_matches(
+        img_bb,img_b,img_b,b_uniques,b_uniques,threshold=t_shared,silent=silent)
     if not silent: print 'Finished BB edges!'
 
-
+    real_matches = data.metadata['cells']
+    
     # checks to see these actually occur in data
     potential_ab_matches = possible_matches(real_matches,img_ab,a_uniques,b_uniques)
-
-    ab_edges_rev = [(a[1],a[0]) for a in ba_edges] # create symmetrical order
-    predicted_ab_matches = list(set(ab_edges).intersection(ab_edges_rev))
-    correct_ab_matches = [ab for ab in predicted_ab_matches if ab in potential_ab_matches]
-
-    print 'Number of correct guesses: {}/{}'.format(len(correct_ab_matches),len(predicted_ab_matches))
-    print 'Number of successes: {}/{}'.format(len(correct_ab_matches),len(potential_ab_matches))
+    
+    # solves for true edges
+    all_edges = [ab_edges,ba_edges,aa_edges,bb_edges]
+    all_freqs = [ab_freqs,ba_freqs,aa_freqs,bb_freqs]
+    all_scores = [ab_scores,ba_scores,aa_scores,bb_scores]
+    all_uniques = [a_uniques,b_uniques]
+    
+    # graph reduction
+    results = reduce_graph(all_edges,all_freqs,all_scores,all_uniques)
+    
+    return results
+    
 
     '''
     Scanning for alpha -> beta graph edges
