@@ -257,14 +257,15 @@ def solve(data,pair_threshold = 0.99,verbose=0):
     sorted(b_uniques,key=int)
 
     # counts of each unique in wells
-    #w_a = [float(sum([1 for well in data.well_data if i in well[0]])) for i in a_uniques] 
-    #w_b = [float(sum([1 for well in data.well_data if i in well[1]])) for i in b_uniques]
-
-    img_ab,img_ba,img_aa,img_bb = None,None,None,None
-    img_a = None
-    img_b = None
-    
     w_tot = len(data.well_data)
+
+    a,b = len(a_uniques),len(b_uniques)
+    
+    img_ab,img_ba = np.zeros((a,b,w_tot)),np.zeros((b,a,w_tot))
+    img_aa,img_bb = np.zeros((a,a,w_tot)),np.zeros((b,b,w_tot))
+    img_a = np.zeros((a,w_tot))
+    img_b = np.zeros((b,w_tot))
+    
 
     if verbose >= 1: print 'Starting image creation...'
     
@@ -275,21 +276,16 @@ def solve(data,pair_threshold = 0.99,verbose=0):
         a_v,b_v = np.zeros((len(a_uniques),1)),np.zeros((len(b_uniques),1)) 
         np.put(a_v,a_ind,np.ones((len(a_ind))))
         np.put(b_v,b_ind,np.ones((len(b_ind))))
-        if img_ab == None: # if nothing has been assigned so far
-            img_ab = np.matmul(a_v,np.transpose(b_v))
-            img_ba = np.matmul(b_v,np.transpose(a_v))
-            img_aa = self_occurence(a_v)
-            img_bb = self_occurence(b_v)
-            img_a = a_v
-            img_b = b_v
-        else: 
-            img_ab = np.dstack((img_ab,np.matmul(a_v,np.transpose(b_v))))
-            img_ba = np.dstack((img_ba,np.matmul(b_v,np.transpose(a_v))))
-            img_aa = np.dstack((img_aa,self_occurence(a_v)))
-            img_bb = np.dstack((img_bb,self_occurence(b_v)))
-            img_a = np.hstack((img_a,a_v))
-            img_b = np.hstack((img_b,b_v))
-        print 'Image progress... {}\r'.format(100*w/w_tot),
+        # assign values to image layers
+        img_ab[:,:,w] = np.matmul(a_v,np.transpose(b_v))
+        img_ba[:,:,w] = np.matmul(b_v,np.transpose(a_v))
+        img_aa[:,:,w] = self_occurence(a_v)
+        img_bb[:,:,w] = self_occurence(b_v)
+        img_a[:,w] = np.squeeze(a_v)
+        img_b[:,w] = np.squeeze(b_v)
+            
+        print 'Image generation progress... {}%\r'.format(100*w/w_tot),
+    print ''
 
     if verbose >= 1: print 'Starting edge detection...'
             
