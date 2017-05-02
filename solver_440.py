@@ -139,7 +139,12 @@ Parameters:
     b_uniques -
         description: labels for unique members of a
         size: (# unique a) x (1)       
-        
+    threshold -
+        description: crieria for Bayesian probability of match
+        size: float in range (0 to 1)
+    silent -
+        description: whether function prints matches as it finds them
+        size: boolean (True/False)   
 Returns:
     predicted_ab - 
         description: list of tuples (a label,b label)
@@ -147,6 +152,8 @@ Returns:
 '''
 # TODO: reduce image dimensions to 2D
 # TODO: use sparse matrices
+# TODO: add stochasicity to well dismissal
+
 def directional_matches(img_ab,img_a,img_b,a_uniques,b_uniques,threshold=0.99,silent=False):
     score = np.zeros((len(a_uniques),len(b_uniques)))
     frequency = np.zeros((len(a_uniques),len(b_uniques)))
@@ -166,14 +173,14 @@ def directional_matches(img_ab,img_a,img_b,a_uniques,b_uniques,threshold=0.99,si
 
         while True: # TODO: create exit condition
             # create counts based on unexplained well data
-            w_ab = np.sum(img_ab[:,:,unexplained_wells],axis=2)
-            w_a = np.sum(img_a[:,unexplained_wells],axis=1)
+            w_ab = np.sum(img_ab[i,:,unexplained_wells],axis=0)
+            w_a = np.sum(img_a[i,unexplained_wells],axis=0)
             w_b = np.sum(img_b[:,unexplained_wells],axis=1)
 
             # assign scores
             for j in xrange(img_ab.shape[1]):
-                n_ab = w_ab[i,j]
-                n_a,n_b = w_a[i] - n_ab,w_b[j] - n_ab
+                n_ab = w_ab[j]
+                n_a,n_b = w_a - n_ab,w_b[j] - n_ab
                 n_tot = len(unexplained_wells)
                 score[i,j],frequency[i,j] = match_score(n_ab,n_a,n_b,n_tot)
 
@@ -188,8 +195,8 @@ def directional_matches(img_ab,img_a,img_b,a_uniques,b_uniques,threshold=0.99,si
                 explained_wells = [k for k in xrange(w_tot) if img_ab[i,j,k] == 1]
                 unexplained_wells = [item for item in unexplained_wells if item not in explained_wells]
                 if not silent:
-                    n_ab = w_ab[i,j]
-                    n_a,n_b = w_a[i] - n_ab,w_b[j] - n_ab
+                    n_ab = w_ab[j]
+                    n_a,n_b = w_a - n_ab,w_b[j] - n_ab
                     n_tot = len(unexplained_wells)
                     print 'Accepted match ({},{}) with score {}.'.format(a_uniques[i],b_uniques[j],score[i,j])
                     print '{} newly explained cells, {} remaining.'.format(len(explained_wells),len(unexplained_wells))
@@ -234,8 +241,13 @@ def reduce_graph(all_edges,all_freqs,all_scores,all_uniques):
 '''
 The Meat-and-Potatoes Function
 '''
+# Verbose: on range 0 to 9
 # TODO: verbose levels
-def solve(data,pair_threshold = 0.99,silent=False):
+def solve(data,pair_threshold = 0.99,verbose=0):
+    
+    if verbose >= 5: silent = False
+    else: silent = True
+    
     # find uniques
     a_uniques = list(set([a for well in data.well_data for a in well[0]]))
     b_uniques = list(set([b for well in data.well_data for b in well[1]]))
@@ -251,9 +263,13 @@ def solve(data,pair_threshold = 0.99,silent=False):
     img_ab,img_ba,img_aa,img_bb = None,None,None,None
     img_a = None
     img_b = None
+    
+    w_tot = len(data.well_data)
 
+    if verbose >= 1: print 'Starting image creation...'
+    
     # creates all the necessary images of the data
-    for well in data.well_data:
+    for w,well in enumerate(data.well_data):
         a_ind = [a_uniques.index(i) for i in well[0]]
         b_ind = [b_uniques.index(i) for i in well[1]]
         a_v,b_v = np.zeros((len(a_uniques),1)),np.zeros((len(b_uniques),1)) 
@@ -273,28 +289,34 @@ def solve(data,pair_threshold = 0.99,silent=False):
             img_bb = np.dstack((img_bb,self_occurence(b_v)))
             img_a = np.hstack((img_a,a_v))
             img_b = np.hstack((img_b,b_v))
+        print 'Image progress... {}\r'.format(100*w/w_tot),
 
-    # Setupt threshold values (TODO: better way to distinguish ab,ba from aa,bb
+    if verbose >= 1: print 'Starting edge detection...'
+            
+    # Setup threshold values (TODO: better way to distinguish ab,ba from aa,bb
     t = pair_threshold
     t_shared = 1 - (1 - pair_threshold)**2
             
     # Find each type of available edge
     ab_edges,ab_freqs,ab_scores = directional_matches(
         img_ab,img_a,img_b,a_uniques,b_uniques,threshold=t,silent=silent)
-    if not silent: print 'Finished AB edges!'
+    if verbose >= 2: print 'Finished AB edges!'
         
     ba_edges,ba_freqs,ba_scores = directional_matches(
         img_ba,img_b,img_a,b_uniques,a_uniques,threshold=t,silent=silent)
-    if not silent: print 'Finished BA edges!'
+    if verbose >= 2: print 'Finished BA edges!'
         
     aa_edges,aa_freqs,aa_scores = directional_matches(
         img_aa,img_a,img_a,a_uniques,a_uniques,threshold=t_shared,silent=silent)
-    if not silent: print 'Finished AA edges!'
+    if verbose >= 2: print 'Finished AA edges!'
         
     bb_edges,bb_freqs,bb_scores = directional_matches(
         img_bb,img_b,img_b,b_uniques,b_uniques,threshold=t_shared,silent=silent)
-    if not silent: print 'Finished BB edges!'
+    if verbose >= 2: print 'Finished BB edges!'
 
+        
+    if verbose >= 1: print 'Finished edge detection, analyzing graph...'
+        
     real_matches = data.metadata['cells']
     
     # checks to see these actually occur in data
@@ -308,6 +330,8 @@ def solve(data,pair_threshold = 0.99,silent=False):
     
     # graph reduction
     results = reduce_graph(all_edges,all_freqs,all_scores,all_uniques)
+    
+    if verbose >= 1: print 'Finished!'
     
     return results
     
