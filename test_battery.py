@@ -46,11 +46,11 @@ def run_Lee(data, **solver_kwargs):
 
   return results
 def stats_Lee(data, results):
-  pairs = results['cells']
+  pairs = [((a,),(b,)) for a,b in results['cells']]
 
   cells = data.metadata['cells']
   all_alphas, all_betas = zip(*cells)
-  all_alphas,all_betas = set(all_alphas),set(all_betas)
+  all_alphas,all_betas = set([a for alist in all_alphas for a in alist]), set([b for blist in all_betas for b in blist])
 
   obs_alphas, obs_betas = zip(*data.well_data)
   obs_alphas, obs_betas = set(sum(obs_alphas, [])), set(sum(obs_betas, []))
@@ -129,8 +129,8 @@ def generate_cells(num_cells, max_alphas=None, max_betas=None):
   #bdegs = np.floor(np.random.pareto(2.1, size=max_alphas))+1
 
   # Cut off at the desired number of cells
-  alphas = sum([[i]*int(n) for i,n in enumerate(adegs)],[])[:num_cells] # this truncation will skew the distro a bit
-  betas = sum([[i]*int(n) for i,n in enumerate(bdegs)], [])[:num_cells]
+  alphas = sum([[(i,)]*int(n) for i,n in enumerate(adegs)],[])[:num_cells] # this truncation will skew the distro a bit
+  betas = sum([[(i,)]*int(n) for i,n in enumerate(bdegs)], [])[:num_cells]
 
   # Randomly assign alpha- and beta-chains to each other
   np.random.shuffle(alphas)

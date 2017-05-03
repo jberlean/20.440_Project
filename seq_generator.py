@@ -126,8 +126,8 @@ class SequencingGenerator(object):
     # TODO: explain what is going on
     cells = []
     for i in range(reps):
-      alpha_indices = xrange(alpha_start_idx, alpha_start_idx+beta_degree)
-      beta_indices = xrange(beta_start_idx, beta_start_idx+alpha_degree)
+      alpha_indices = [(a,) for a in xrange(alpha_start_idx, alpha_start_idx+beta_degree)]
+      beta_indices = [(b,) for b in xrange(beta_start_idx, beta_start_idx+alpha_degree)]
       cells.extend(it.product(alpha_indices, beta_indices))
 
       alpha_start_idx += beta_degree
@@ -194,7 +194,7 @@ class SequencingGenerator(object):
 
       # Extract alpha and beta chains in the well
       alphas, betas = zip(*cells) if len(cells)>0 else ([],[])
-      alphas, betas = list(alphas), list(betas)
+      alphas, betas = [a for alist in alphas for a in alist], [b for blist in betas for b in blist]
 
       # Apply chain deletions and chain misplacements
       alphas_del_flag = [bool(v<self.chain_deletion_prob) for v in np.random.uniform(size=len(alphas))]
