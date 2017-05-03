@@ -34,7 +34,7 @@ def run_tests(tests):
 def save_test_results(results, path):
   import json
   f = open(path, 'w')
-  json.dump(f, results)
+  json.dump(results, f)
       
 
 def run_Lee(data, **solver_kwargs):
