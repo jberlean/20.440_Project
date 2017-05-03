@@ -1,3 +1,5 @@
+import random
+
 import itertools as it
 import numpy as np
 
@@ -154,6 +156,14 @@ class SequencingGenerator(object):
       freqs = np.array([1]*len(self.cells))
     elif distro == 'power-law':
       freqs = np.random.pareto(-params['alpha'], len(self.cells)) ## TODO: there's something screwy abt this distro, talk to holec abt it
+    elif distro == 'Lee':
+      p_s = params.get('p_s', 0.5)
+      n_s = params.get('n_s', 10)
+      freq_min = p_s/(len(self.cells) - n_s) # freq of clones in distro tail
+      freq_n_s = 1.1*freq_min # lowest clone frequency within top p_s
+      r = 2.*(p_s-freq_n_s*n_s)/((n_s-1)*n_s) # freq step size within top p_s
+      freqs = [freq_n_s+r*i for i in range(n_s)] + [freq_min]*(len(self.cells)-n_s)
+      random.shuffle(freqs)
     elif distro == 'explicit':
       freqs = np.array(params['frequencies'])
     else:
