@@ -153,6 +153,7 @@ Returns:
 # TODO: reduce image dimensions to 2D
 # TODO: use sparse matrices
 # TODO: add stochasicity to well dismissal
+# TODO: implement prior distribution
 
 def directional_matches(img_ab,img_a,img_b,a_uniques,b_uniques,threshold=0.99,silent=False):
     score = np.zeros((len(a_uniques),len(b_uniques)))
@@ -204,7 +205,10 @@ def directional_matches(img_ab,img_a,img_b,a_uniques,b_uniques,threshold=0.99,si
             else:
                 if not silent: print 'No more sufficient matches found for ({}), exiting...\n'.format(a_uniques[i])
                 break
-
+        print 'Edge detection progress... {}%\r'.format(100*(i+1)/img_ab.shape[0]),
+        
+    print ''
+    
     return predicted_ab,predicted_frequency,predicted_score # returns edges
 
 
@@ -284,7 +288,7 @@ def solve(data,pair_threshold = 0.99,verbose=0):
         img_a[:,w] = np.squeeze(a_v)
         img_b[:,w] = np.squeeze(b_v)
             
-        print 'Image generation progress... {}%\r'.format(100*w/w_tot),
+        print 'Image generation progress... {}%\r'.format(100*(w+1)/w_tot),
     print ''
 
     if verbose >= 1: print 'Starting edge detection...'
