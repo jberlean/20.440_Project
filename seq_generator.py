@@ -132,6 +132,32 @@ class SequencingGenerator(object):
       beta_start_idx += alpha_degree
     return cells
 
+  @staticmethod
+  def generate_cells_lee(num_cells, max_alphas=None, max_betas=None):
+    if max_alphas == None:  max_alphas = num_cells
+    if max_betas == None:  max_betas = num_cells
+
+    # Generate the degree for each alpha- and beta-chain from a given distribution
+    sharing_probs=[0.8375, 0.0805, 0.029, 0.013, 0.021, 0.0025, 0.0165] # Averages from the Lee et al. paper
+    adegs = np.random.choice(range(1,8), max_alphas, replace=True, p=sharing_probs)
+    bdegs = np.random.choice(range(1,8), max_betas, replace=True, p=sharing_probs)
+
+    # If you want to generate from a power law instead (not sure if this works as expected)
+    #adegs = np.floor(np.random.pareto(2.1, size=max_alphas))+1
+    #bdegs = np.floor(np.random.pareto(2.1, size=max_alphas))+1
+
+    # Cut off at the desired number of cells
+    alphas = sum([[i]*int(n) for i,n in enumerate(adegs)],[])[:num_cells] # this trunc. will skew the distro a bit
+    betas = sum([[i]*int(n) for i,n in enumerate(bdegs)], [])[:num_cells]
+
+    # Randomly assign alpha- and beta-chains to each other
+    np.random.shuffle(alphas)
+    np.random.shuffle(betas)
+    cells = list(set(zip(alphas, betas))) # Due to chance dups, there may be slightly less than num_cells cells
+    
+    # (A slightly more complex method could be used to ensure exactly num_cells cells)
+    return cells
+
   def _sample_cells_per_well(self):
     # Generate a list of number of cells for each well, based on the specified distribution
     # This is called to generate a new list each time generate_sequencing_data() is called.

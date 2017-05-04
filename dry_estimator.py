@@ -24,15 +24,15 @@ Main function execution (if file not imported, this will run)
 '''
 
 def main():
-    mcs = Multicell_Sequencing(w=96,n=1000,alpha=1.0,count=3000)
+    mcs = Multicell_Sequencing(w=96,n=100,alpha=1.0,count=3000)
+    mcs.fs_logspace(-6,-1,101)
+    #mcs.var_linspace('alpha',0.1,3.0,100)
     mcs.build_repertoire()
-    mcs.fs_logspace(-11,-1,101)
     fs,results = mcs.start_test()
-
-    print 'Clone repertoires :',mcs.p[:10]
-    print 'Clone repertoires:',mcs.p[-10:]
+    #fs,var,results = mcs.start_mass_test()
 
     visualize_1D(fs,results)
+    #visualize_2D([np.log10(f) for f in fs],var,results)
     #visualize_repertoire(mcs.p) 
 
 '''
@@ -91,6 +91,10 @@ class Multicell_Sequencing:
         self.var_name = var_name
         self.var = np.logspace(start,stop,num)
 
+    def var_linspace(self,var_name,start,stop,num=5):
+        self.var_name = var_name
+        self.var = np.linspace(start,stop,num)
+
     def start_mass_test(self,silent=True):
         if self.var_name is None:
             print 'No variable defined for sensitivity!'
@@ -100,17 +104,18 @@ class Multicell_Sequencing:
         
         # start iteration over variable for sensitivity
         for v in self.var: 
+            print 'Starting variable {} for value {}'.format(self.var_name,v)
             if self.var_name == 'w': 
-                self.w = v
+                self.w = int(v)
             elif self.var_name == 'n':
-                self.n = v
+                self.n = int(v)
             elif self.var_name == 'alpha':
-                self.alpha = v 
+                self.alpha = float(v) 
             elif self.var_name == 'count':
-                self.count = v
+                self.count = int(v)
 
-            mcs.build_repertoire()
-            fs,res = mcs.start_test()
+            self.build_repertoire()
+            fs,res = self.start_test()
             results.append(res)
 
         return self.fs,self.var,results
@@ -123,7 +128,7 @@ class Multicell_Sequencing:
         elif self.fs is None:
             print 'Clone frequencies not defined!'
             return None 
-        
+
         self.p_present = [1 - (1-i)**self.n for i in self.p]
         self.fs_present = [1 - (1-i)**self.n for i in self.fs]
 
@@ -156,6 +161,15 @@ def visualize_repertoire(p):
     plt.title('Repertoire clonal frequencies')
     plt.xlabel('Clone Index (#)')
     plt.ylabel('Frequency of Clone (% total)')
+    plt.show(block=False)
+    raw_input('Hit enter to close...')
+    plt.close()
+
+def visualize_2D(fs,var,results):
+    plt.pcolor(fs,var,results)
+    plt.xlabel('Frequency of target clone')
+    plt.ylabel('')
+    plt.colorbar()
     plt.show(block=False)
     raw_input('Hit enter to close...')
     plt.close()

@@ -61,6 +61,7 @@ gen.set_options(
 
 ## Generate new data based on new parameters and save to file
 data3 = gen.generate_data()
+u
 
 ## Access generated well data
 # well_data is a list of length <num_wells>, where each element is two lists, the first being the list of alpha-chains and the second being the list of beta-chains
