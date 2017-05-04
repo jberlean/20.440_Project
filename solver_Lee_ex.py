@@ -66,6 +66,20 @@ def test_solver(data, **solver_kwargs):
 
   print
 
+  sorted_clones = sorted(zip(data.metadata['generated_data']['cell_frequencies'], data.metadata['cells']), reverse=True)
+  p_s = 0
+  for num_top_clones in range(len(sorted_clones)):
+    p_s += sorted_clones[num_top_clones][0]
+    num_top_clones += 1
+    if p_s >= 0.5:  break
+  _,top_clones = zip(*sorted_clones[:num_top_clones])
+  _,tail_clones = zip(*sorted_clones[num_top_clones:])
+  top_clones = set(top_clones)
+  tail_clones = set(tail_clones)
+  
+  print "  Depth of top clones:", 100.*len([p for p in pairs if p in top_clones])/len(top_clones)
+  print "  Depth of tail:", 100.*len([p for p in pairs if p in tail_clones])/len(tail_clones)
+
   return results
 
 def generate_cells(num_cells, max_alphas=None, max_betas=None):
@@ -73,9 +87,11 @@ def generate_cells(num_cells, max_alphas=None, max_betas=None):
   if max_betas == None:  max_betas = num_cells
 
   # Generate the degree for each alpha- and beta-chain from a given distribution
-  sharing_probs=[0.8375, 0.0805, 0.029, 0.013, 0.021, 0.0025, 0.0165] # Averages from the Lee et al. paper
-  adegs = np.random.choice(range(1,8), max_alphas, replace=True, p=sharing_probs)
-  bdegs = np.random.choice(range(1,8), max_betas, replace=True, p=sharing_probs)
+  a_sharing_probs=[0.816,0.085,0.021,0.007,0.033,0.005,0.033]
+  b_sharing_probs=[0.859,0.076,0.037,0.019,0.009]
+  #[0.8375, 0.0805, 0.029, 0.013, 0.021, 0.0025, 0.0165] # Averages from the Lee et al. paper
+  adegs = np.random.choice(range(1,len(a_sharing_probs)+1), max_alphas, replace=True, p=a_sharing_probs)
+  bdegs = np.random.choice(range(1,len(b_sharing_probs)+1), max_betas, replace=True, p=b_sharing_probs)
   
   # If you want to generate from a power law instead (not sure if this works as expected)
   #adegs = np.floor(np.random.pareto(2.1, size=max_alphas))+1
@@ -92,14 +108,29 @@ def generate_cells(num_cells, max_alphas=None, max_betas=None):
   # (A slightly more complex method could be used to ensure exactly num_cells cells)
 
   return cells
+
+def generate_cell_freqs(num_cells, n_s, p_s = 0.5):
+  # n_s: number of clones in top p_s of population
+
+  freq_min = p_s/(num_cells - n_s) # frequency of clones in the distribution tail
+  freq_n_s = 1.1*freq_min # lowest clone frequency within top p_s
+
+  r = 2.*(p_s-freq_n_s*n_s)/((n_s-1)*n_s)
+  freqs = [freq_n_s + r*i for i in range(n_s)] + [freq_min]*(num_cells-n_s)
+
+  return freqs
   
 
 # Make SequencingGenerator object
 gen = SG()
-gen.chain_deletion_prob=10**-1
-gen.num_wells = 1000
-gen.set_cells_per_well('poisson', lam=100)
-gen.cells = generate_cells(1000)
+gen.chain_deletion_prob=0.15
+gen.num_wells = 96*5
+gen.set_cells_per_well('constant', cells_per_well=100)
+gen.cells = generate_cells(2100)
+#gen.cells = SG.generate_cells(100, 1, 2)
+
+freqs = generate_cell_freqs(len(gen.cells), 50)
+gen.set_cell_frequency_distribution(distro_type='explicit',frequencies=freqs)
 
 # Generate data and print statistics
 data = gen.generate_data()
@@ -107,5 +138,5 @@ print_generator_args(gen)
 
 # Run solver with different arguments
 res1 = test_solver(data)
-res2 = test_solver(data, pair_threshold=.6)
-res3 = test_solver(data, pair_threshold=.1)
+#res2 = test_solver(data, pair_threshold=.6)
+res3 = test_solver(data, pair_threshold=.3)

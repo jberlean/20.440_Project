@@ -63,7 +63,6 @@ def solve(seq_data, iters=100, pair_threshold = 0.9):
         well_pairings[well_idx] = compute_well_pairings(*well_data[well_idx], scores=S)
         percent_done += 100./len(well_pairings)
         print "Computing likely pairings... {0}%\r".format(int(percent_done)),
-        sys.stdout.flush()
       for a,b in well_pairings[well_idx]:
         pairing_counts[(a,b)] = pairing_counts.get((a,b), 0) + 1
 
