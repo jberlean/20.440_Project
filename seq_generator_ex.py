@@ -35,8 +35,7 @@ cells = SequencingGenerator.generate_cells(100, alpha_dual_prob = 0.2) # Generat
 gen.cells = cells
 
 #  also try:
-# cells = SequencingGenerator.generate_cells(100, 1, 2) # Generates 200 cells with each beta chain associated with 2 alpha chains
-# cells = SequencingGenerator.generate_cells(100, 2, 2) # Generates 400 cells with pairs of alpha chains associated with pairs of beta chains (e.g. a1+b1, a1+b2, a2+b1, a2+b2)
+# cells = SequencingGenerator.generate_cells(100, alpha_sharing_probs = [0.5,0.5]) # Generates 100 cells with each alpha chain having a 50-50 chance of being used in one or two clonotypes
 
 
 ## Set the cell frequency distribution
