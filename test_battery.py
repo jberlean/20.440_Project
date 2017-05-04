@@ -2,7 +2,8 @@ import sys
 
 import numpy as np
 
-from solver_Lee import solve
+from solver_Lee import solve as solve_Lee
+from solver_440 import solve as solve_440
 from seq_data import SequencingData as SD
 from seq_generator import SequencingGenerator as SG
 
@@ -38,13 +39,19 @@ def save_test_results(results, path):
       
 
 def run_Lee(data, **solver_kwargs):
-  results = solve(data, **solver_kwargs)
-  
-  print "Ran Lee et al. solver with the following optional arguments:"
+  print "Running Lee et al. solver with the following optional arguments:"
+
   for k,v in solver_kwargs.iteritems():
     print "  {0}: {1}".format(k,v)
 
-  return results
+  return solve_Lee(data, **solver_kwargs)
+def run_440(data, **solver_kwargs):
+  print "Running 440 solver with the following optional arguments:"
+  for k,v in solver_kwargs.iteritems():
+    print "  {}: {}".format(k,v)
+
+  return solve_440(data, **solver_kwargs)
+
 def stats_Lee(data, results):
   pairs = [((a,),(b,)) for a,b in results['cells']]
 
@@ -56,8 +63,13 @@ def stats_Lee(data, results):
   obs_alphas, obs_betas = set(sum(obs_alphas, [])), set(sum(obs_betas, []))
 
   cells_set = set([(a,b) for a,b in cells])
+  cells_dual = [p for p in cells_set if len(p[0])==2 or len(p[1])==2]
+
   correct_pairs = [p for p in pairs if p in cells_set]
   incorrect_pairs = [p for p in pairs if p not in cells_set]
+
+  correct_dual_pairs = [p for p in correct_pairs if len(p[0])==2 or len(p[1])==2]
+  incorrect_dual_pairs = [p for p in incorrect_pairs if len(p[0])==2 or len(p[1])==2]
 
   pair_idxs = [cells.index(p) if p in cells else -1 for p in pairs]
   actual_freqs = [data.metadata['generated_data']['cell_frequencies'][i] if i!=-1 else 0.0 for i in pair_idxs]
@@ -85,11 +97,13 @@ def stats_Lee(data, results):
     'num_pairs_correct': len(correct_pairs),
     'num_pairs_incorrect': len(incorrect_pairs),
     'false_negative': 1. - float(len(correct_pairs))/len(cells),
-    'false_discovery': float(len(incorrect_pairs))/len(pairs),
+    'false_discovery': float(len(incorrect_pairs))/len(pairs) if len(pairs)>0 else float('nan'),
     'freq_mse': np.mean([(f1-f2)**2 for f1,f2 in zip(actual_freqs, pred_freqs)]),
     'freq_ci_accuracy': np.mean([(f>=f_min and f<=f_max) for f,(f_min,f_max) in zip(actual_freqs, pred_freqs_CI)]),
     'depth_top': float(len([p for p in pairs if p in top_clones]))/len(top_clones),
-    'depth_tail': float(len([p for p in pairs if p in tail_clones]))/len(tail_clones)
+    'depth_tail': float(len([p for p in pairs if p in tail_clones]))/len(tail_clones) if len(tail_clones)>0 else float('nan'),
+    'depth_dual': float(len(correct_dual_pairs))/len(cells_dual) if len(cells_dual)>0 else float('nan'),
+    'false_discovery_dual': float(len(incorrect_dual_pairs))/(len(correct_dual_pairs)+len(incorrect_dual_pairs)) if len(correct_dual_pairs)+len(incorrect_dual_pairs)>0 else float('nan')
   }
 
   print "Solution statistics:"
@@ -107,6 +121,8 @@ def stats_Lee(data, results):
 
   print "  Depth of top clones:", 100.*stats['depth_top']
   print "  Depth of tail:", 100.*stats['depth_tail']
+  print "  Depth of dual clones (not adjusted):", 100*stats['depth_dual']
+  print "  False dual rate:", 100*stats['false_discovery_dual']
 
   print
 
@@ -142,9 +158,8 @@ def generate_cells(num_cells, max_alphas=None, max_betas=None):
 
 def generate_sequencing_data(num_cells, **seq_gen_args):
   gen = SG(**seq_gen_args)
-  gen.cells = generate_cells(num_cells)
+  gen.cells = SG.generate_cells(num_cells)
   #gen.set_cell_frequency_distribution(distro_type='explicit', frequencies=generate_cell_freqs(len(gen.cells),50))
-  # TODO: Migrate gneerate_cell_freqs to seq_generator.py as "Lee" cell frequency distribution
 
   print "Generated data with the following parameters:"
   print "  Number of wells: {0}".format(gen.num_wells)
@@ -171,17 +186,18 @@ def generate_sequencing_data(num_cells, **seq_gen_args):
 tests = [
   (5, 
    generate_sequencing_data,
-   {'num_cells': 300,
+   {'num_cells': 100,
     'chain_deletion_prob': 0.15,
-    'num_wells': 96,
+    'num_wells': 96*5,
     'cells_per_well_distribution': 'constant',
-    'cells_per_well_distribution_params': {'cells_per_well': 10},
+    'cells_per_well_distribution_params': {'cells_per_well': 50},
     'cell_frequency_distribution': 'Lee',
     'cell_frequency_distribution_params': {'n_s': 50}
    },
    ((run_Lee, {'pair_threshold': 0.9}, stats_Lee),
-    (run_Lee, {'pair_threshold': 0.6}, stats_Lee),
-    (run_Lee, {'pair_threshold': 0.3}, stats_Lee))
+#    (run_Lee, {'pair_threshold': 0.6}, stats_Lee),
+#    (run_Lee, {'pair_threshold': 0.3}, stats_Lee),
+    (run_440, {'pair_threshold': 0.90}, stats_Lee))
   )
 ]
         

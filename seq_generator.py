@@ -29,7 +29,7 @@ class SequencingGenerator(object):
     ## Set default parameter values
     self.num_wells = 96
     self.set_cells_per_well(distro_type = 'constant', cells_per_well = 35)
-    self.cells = SequencingGenerator.generate_cells(1000, 1, 1)
+    self.cells = SequencingGenerator.generate_cells(1000)
     self.set_cell_frequency_distribution(distro_type = 'power-law', alpha = -1)
     self.chain_misplacement_prob = 0
     self.chain_deletion_prob = 0
@@ -118,20 +118,33 @@ class SequencingGenerator(object):
 
 
   @staticmethod
-  def generate_cells(reps, alpha_degree, beta_degree, alpha_start_idx=0, beta_start_idx=0):
-    # alpha_degree: number of beta chains associated with each alpha chain
-    # beta_degree: number of alpha chains associated with each beta chain
-    # reps: number of iterations to run (total cells created = alpha_degree*beta_degree*reps)
+  def generate_cells(num_cells, alpha_sharing_probs = None, beta_sharing_probs = None, alpha_dual_prob = 0.0, beta_dual_prob = 0.0, alpha_start_idx=0, beta_start_idx=0):
+    if alpha_sharing_probs is None:
+      alpha_sharing_probs = [0.816,0.085,0.021,0.007,0.033,0.005,0.033]
+    if beta_sharing_probs is None:
+      beta_sharing_probs = [0.859,0.076,0.037,0.019,0.009]
 
-    # TODO: explain what is going on
-    cells = []
-    for i in range(reps):
-      alpha_indices = [(a,) for a in xrange(alpha_start_idx, alpha_start_idx+beta_degree)]
-      beta_indices = [(b,) for b in xrange(beta_start_idx, beta_start_idx+alpha_degree)]
-      cells.extend(it.product(alpha_indices, beta_indices))
+    # Generate the degree for each alpha- and beta-chain from the given distribution
+    adegs = np.random.choice(range(1,len(alpha_sharing_probs)+1), num_cells, replace=True, p=alpha_sharing_probs)
+    bdegs = np.random.choice(range(1,len(beta_sharing_probs)+1), num_cells, replace=True, p=beta_sharing_probs)
 
-      alpha_start_idx += beta_degree
-      beta_start_idx += alpha_degree
+    # Generate how many alpha- and beta-chains will be in each cell (i.e. how many dual chains)
+    adual = [2 if v<=alpha_dual_prob else 1 for v in np.random.uniform(size=num_cells)]
+    bdual = [2 if v<=beta_dual_prob else 1 for v in np.random.uniform(size=num_cells)]
+
+    # Cut off at the desired number of cells
+    alphas = [(i,) for i,n in enumerate(adegs) for _ in range(n)][:sum(adual)] # this truncation will alter the distro somewhat
+    betas = [(i,) for i,n in enumerate(bdegs) for _ in range(n)][:sum(bdual)]
+
+    # Randomly assign alpha- and beta-chains to each other
+    np.random.shuffle(alphas)
+    np.random.shuffle(betas)
+    for i in range(num_cells):
+      if adual[i]==2:  alphas[i:i+2] = [alphas[i]+alphas[i+1]]
+      if bdual[i]==2:  betas[i:i+2] = [betas[i]+betas[i+1]]
+    cells = list(set(zip(alphas, betas))) # Due to random duplicates, there may be slightly less than num_cells cells
+    # (A slightly more complex method could be used to ensure exactly num_cells cells)
+
     return cells
 
   def _sample_cells_per_well(self):
