@@ -186,7 +186,7 @@ def generate_sequencing_data(num_cells, **seq_gen_args):
 tests = [
   (5, 
    generate_sequencing_data,
-   {'num_cells': 100,
+   {'num_cells': 1000,
     'chain_deletion_prob': 0.15,
     'num_wells': 96*5,
     'cells_per_well_distribution': 'constant',
