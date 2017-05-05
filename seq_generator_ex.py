@@ -28,14 +28,14 @@ gen.set_cells_per_well(distro_type = 'poisson', lam=5) # poisson distribution wi
 
 ## Set the cells in the system
 # Creates a list of cells with 100 cells with unique alpha- and beta-chains along with 200 cells with alpha-chains each associated with 2 beta-chains
-cells = SequencingGenerator.generate_cells(100, 1, 1) # Generates 100 cells with unique alpha- and beta-chains
-cells += SequencingGenerator.generate_cells(100, 2, 1, alpha_start_idx=100, beta_start_idx=100) # Generates 200 cells with alpha- and beta-chains indexed starting at 100, then appends this data to the previous cell data in cells1
+cells = SequencingGenerator.generate_cells(100) # Generates 100 cells with default distribution of alpha/beta chain sharing
+cells = SequencingGenerator.generate_cells(100, alpha_start_idx=100, beta_start_idx=100) # Generates 100 cells with alpha- and beta-chains indexed starting at 100
+cells = SequencingGenerator.generate_cells(100, alpha_dual_prob = 0.2) # Generates 100 cells, each with a 20% of having dual alpha-chains
 # Set the cells used by the generator
 gen.cells = cells
 
 #  also try:
-# cells = SequencingGenerator.generate_cells(100, 1, 2) # Generates 200 cells with each beta chain associated with 2 alpha chains
-# cells = SequencingGenerator.generate_cells(100, 2, 2) # Generates 400 cells with pairs of alpha chains associated with pairs of beta chains (e.g. a1+b1, a1+b2, a2+b1, a2+b2)
+# cells = SequencingGenerator.generate_cells(100, alpha_sharing_probs = [0.5,0.5]) # Generates 100 cells with each alpha chain having a 50-50 chance of being used in one or two clonotypes
 
 
 ## Set the cell frequency distribution
