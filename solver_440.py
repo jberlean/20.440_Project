@@ -181,7 +181,8 @@ def directional_matches(img_ab,img_a,img_b,a_uniques,b_uniques,threshold=0.99,si
             n_ab = w_ab[j]
             n_a,n_b = w_a - n_ab,w_b[j] - n_ab
             n_tot = len(unexplained_wells)
-            score[i,j],frequency[i,j] = match_score(n_ab,n_a,n_b,n_tot, 1./np.sqrt(img_ab.shape[0]*img_ab.shape[1]))
+            #score[i,j],frequency[i,j] = match_score(n_ab,n_a,n_b,n_tot, 1./np.sqrt(img_ab.shape[0]*img_ab.shape[1]))
+            score[i,j],frequency[i,j] = match_score(n_ab,n_a,n_b,n_tot, 0.5) # effectively take out prior
 
             if score[i,j] > threshold:
               predicted_ab.append((a_uniques[i],b_uniques[j]))
