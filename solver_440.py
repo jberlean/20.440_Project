@@ -95,13 +95,13 @@ def self_occurence(v):
     np.fill_diagonal(temp,0)
     return temp
 
-def match_score(w_ab,w_a,w_b,w_tot):
+def match_score(w_ab,w_a,w_b,w_tot, match_prior = 0.5):
     if w_ab == 0: 
         return 0.,0.
     else:
         mp,nmp = match_probability(w_ab,w_a,w_b,w_tot),nonmatch_probability(w_ab,w_a,w_b,w_tot)
         f_ab,_,_ = match_frequency(w_ab,w_a,w_b,w_tot)
-        return (10**mp)/(10**mp+10**nmp),f_ab
+        return (10**mp * match_prior)/(10**mp * match_prior + 10**nmp * (1-match_prior)),f_ab
 
 def possible_matches(real_matches,img_ab,a_uniques,b_uniques):
     w_ab = np.sum(img_ab[:,:,:],axis=2)
@@ -153,7 +153,6 @@ Returns:
 # TODO: reduce image dimensions to 2D
 # TODO: use sparse matrices
 # TODO: add stochasicity to well dismissal
-# TODO: implement prior distribution
 
 def directional_matches(img_ab,img_a,img_b,a_uniques,b_uniques,threshold=0.99,silent=False):
     score = np.zeros((len(a_uniques),len(b_uniques)))
@@ -172,39 +171,23 @@ def directional_matches(img_ab,img_a,img_b,a_uniques,b_uniques,threshold=0.99,si
 
         unexplained_wells = list(xrange(w_tot))
 
-        while True: # TODO: create exit condition
-            # create counts based on unexplained well data
-            w_ab = np.sum(img_ab[i,:,unexplained_wells],axis=0)
-            w_a = np.sum(img_a[i,unexplained_wells],axis=0)
-            w_b = np.sum(img_b[:,unexplained_wells],axis=1)
+        # create counts based on unexplained well data
+        w_ab = np.sum(img_ab[i,:,unexplained_wells],axis=0)
+        w_a = np.sum(img_a[i,unexplained_wells],axis=0)
+        w_b = np.sum(img_b[:,unexplained_wells],axis=1)
 
-            # assign scores
-            for j in xrange(img_ab.shape[1]):
-                n_ab = w_ab[j]
-                n_a,n_b = w_a - n_ab,w_b[j] - n_ab
-                n_tot = len(unexplained_wells)
-                score[i,j],frequency[i,j] = match_score(n_ab,n_a,n_b,n_tot)
+        # assign scores
+        for j in xrange(img_ab.shape[1]):
+            n_ab = w_ab[j]
+            n_a,n_b = w_a - n_ab,w_b[j] - n_ab
+            n_tot = len(unexplained_wells)
+            score[i,j],frequency[i,j] = match_score(n_ab,n_a,n_b,n_tot, 1./np.sqrt(img_ab.shape[0]*img_ab.shape[1]))
 
-            # find best pair to add
-            j = np.argmax(np.nan_to_num(score[i,:]))
-
-            # check if the score is passable
             if score[i,j] > threshold:
-                predicted_ab.append((a_uniques[i],b_uniques[j])) # add edge!
-                predicted_frequency.append(frequency[i,j]) # add ab frequency!
-                predicted_score.append(score[i,j]) # add confidence!
-                explained_wells = [k for k in xrange(w_tot) if img_ab[i,j,k] == 1]
-                unexplained_wells = [item for item in unexplained_wells if item not in explained_wells]
-                if not silent:
-                    n_ab = w_ab[j]
-                    n_a,n_b = w_a - n_ab,w_b[j] - n_ab
-                    n_tot = len(unexplained_wells)
-                    print 'Accepted match ({},{}) with score {}.'.format(a_uniques[i],b_uniques[j],score[i,j])
-                    print '{} newly explained cells, {} remaining.'.format(len(explained_wells),len(unexplained_wells))
-                    print 'N_ab,N_a,N_b,N_tot:',n_ab,n_a,n_b,n_tot
-            else:
-                if not silent: print 'No more sufficient matches found for ({}), exiting...\n'.format(a_uniques[i])
-                break
+              predicted_ab.append((a_uniques[i],b_uniques[j]))
+              predicted_frequency.append(frequency[i,j])
+              predicted_score.append(score[i,j])
+
         print 'Edge detection progress... {}%\r'.format(100*(i+1)/img_ab.shape[0]),
         
     print ''
@@ -235,7 +218,7 @@ def reduce_graph(all_edges,all_freqs,all_scores,all_uniques):
     results = dict()
     results['cells'] = edges
     results['cell_frequencies'] = freqs
-    results['cell_frequencies_CI'] = scores
+    results['cell_frequencies_CI'] = [(f-s,f+s) for f,s in zip(freqs,scores)]
 
     return results
 

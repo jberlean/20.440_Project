@@ -53,7 +53,7 @@ def run_440(data, **solver_kwargs):
   return solve_440(data, **solver_kwargs)
 
 def stats_Lee(data, results):
-  pairs = [((a,),(b,)) for a,b in results['cells']]
+  pairs = results['cells']#[((a,),(b,)) for a,b in results['cells']]
 
   cells = data.metadata['cells']
   all_alphas, all_betas = zip(*cells)
@@ -127,6 +127,9 @@ def stats_Lee(data, results):
   print
 
   return stats
+def stats_440(data, results):
+  results['cells'] = [((a,),(b,)) for a,b in results['cells']]
+  return stats_Lee(data, results)
 
 
 def generate_cells(num_cells, max_alphas=None, max_betas=None):
@@ -197,7 +200,7 @@ tests = [
    ((run_Lee, {'pair_threshold': 0.9}, stats_Lee),
 #    (run_Lee, {'pair_threshold': 0.6}, stats_Lee),
 #    (run_Lee, {'pair_threshold': 0.3}, stats_Lee),
-    (run_440, {'pair_threshold': 0.90}, stats_Lee))
+    (run_440, {'pair_threshold': 0.90}, stats_440))
   )
 ]
         
