@@ -1,4 +1,5 @@
 import sys
+import itertools as it
 
 import numpy as np
 
@@ -53,76 +54,132 @@ def run_440(data, **solver_kwargs):
   return solve_440(data, **solver_kwargs)
 
 def stats_Lee(data, results):
-  pairs = results['cells']#[((a,),(b,)) for a,b in results['cells']]
+  def separate_top_tail_clones(fraction = 0.5):
+    sorted_freqs, sorted_clones = zip(*sorted(zip(data.metadata['generated_data']['cell_frequencies'], data.metadata['cells']), reverse=True))
+    idx_cutoff = len(filter(lambda f: f<fraction, np.cumsum(sorted_freqs)))
+    top = sorted_clones[:idx_cutoff]
+    tail = sorted_clones[idx_cutoff:]
+    return top, tail
 
-  cells = data.metadata['cells']
-  all_alphas, all_betas = zip(*cells)
+  def clones_to_pairings(clones):
+    pairings = set()
+    for alist,blist in clones:
+      pairings |= set(it.product(alist,blist))
+    return pairings
+    
+
+  true_clones = data.metadata['cells']
+  true_pairings = clones_to_pairings(true_clones)
+  true_top_clones, true_tail_clones = separate_top_tail_clones()
+
+  true_dual_clones = [c for c in true_clones if len(c[0])>1 or len(c[1])>1]
+  true_top_dual_clones = [c for c in true_top_clones if len(c[0])>1 or len(c[1])>1]
+  true_tail_dual_clones = [c for c in true_tail_clones if len(c[0])>1 or len(c[1])>1]
+
+  all_alphas, all_betas = zip(*true_clones)
   all_alphas,all_betas = set([a for alist in all_alphas for a in alist]), set([b for blist in all_betas for b in blist])
-
   obs_alphas, obs_betas = zip(*data.well_data)
   obs_alphas, obs_betas = set(sum(obs_alphas, [])), set(sum(obs_betas, []))
 
-  cells_set = set([(a,b) for a,b in cells])
-  cells_dual = [p for p in cells_set if len(p[0])==2 or len(p[1])==2]
+  clones = results['cells']
+  dual_clones = [c for c in clones if len(c[0])>1]
+  pairings = clones_to_pairings(clones)
 
-  correct_pairs = [p for p in pairs if p in cells_set]
-  incorrect_pairs = [p for p in pairs if p not in cells_set]
+  correct_clones = [c for c in clones if c in true_clones]
+  correct_top_clones = [c for c in clones if c in true_top_clones]
+  correct_tail_clones = [c for c in clones if c in true_tail_clones]
 
-  correct_dual_pairs = [p for p in correct_pairs if len(p[0])==2 or len(p[1])==2]
-  incorrect_dual_pairs = [p for p in incorrect_pairs if len(p[0])==2 or len(p[1])==2]
+  candidate_dual_clones = [c for c in dual_clones if all([p in pairings for p in it.product(*c)]) and c in true_dual_clones]
+  candidate_top_dual_clones = [c for c in candidate_dual_clones if c in true_top_dual_clones]
+  candidate_tail_dual_clones = [c for c in candidate_dual_clones if c in true_tail_dual_clones]
+  correct_dual_clones = [c for c in dual_clones if c in true_dual_clones]
+  correct_top_dual_clones = [c for c in dual_clones if c in correct_top_clones]
+  correct_tail_dual_clones = [c for c in dual_clones if c in correct_tail_clones]
 
-  pair_idxs = [cells.index(p) if p in cells else -1 for p in pairs]
-  actual_freqs = [data.metadata['generated_data']['cell_frequencies'][i] if i!=-1 else 0.0 for i in pair_idxs]
-  pred_freqs = results['cell_frequencies']
-  pred_freqs_CI = results['cell_frequencies_CI']
+  correct_pairings = [p for p in pairings if p in true_pairings]
+  incorrect_pairings = [p for p in pairings if p not in true_pairings]
 
-  sorted_clones = sorted(zip(data.metadata['generated_data']['cell_frequencies'], data.metadata['cells']), reverse=True)
-  p_s = 0
-  for num_top_clones in range(len(sorted_clones)):
-    p_s += sorted_clones[num_top_clones][0]
-    num_top_clones += 1
-    if p_s >= 0.5:  break
-  _,top_clones = zip(*sorted_clones[:num_top_clones])
-  _,tail_clones = zip(*sorted_clones[num_top_clones:])
-  top_clones = set(top_clones)
-  tail_clones = set(tail_clones)
+  clone_freqs = results['cell_frequencies']
+  clone_freqs_CI = results['cell_frequencies_CI']
+  clone_true_freqs = [data.metadata['generated_data']['cell_frequencies'][true_clones.index(c)] if c in true_clones else 0.0 for c in clones]
+
+  #print "", correct_pairings
+  #print "", [c for c in clones if c not in correct_clones]
 
   stats = {
-    'num_cells': len(cells),
+    'num_cells': len(true_clones),
+    'num_dual_alpha_cells': len(filter(lambda c: len(c[0])>1, true_clones)),
+    'num_dual_beta_cells': len(filter(lambda c: len(c[1])>1, true_clones)),
     'num_alphas': len(all_alphas),
     'num_betas': len(all_betas),
     'num_alphas_obs': len(obs_alphas),
     'num_betas_obs': len(obs_betas),
-    'num_pairs': len(pairs),
-    'num_pairs_correct': len(correct_pairs),
-    'num_pairs_incorrect': len(incorrect_pairs),
-    'false_negative': 1. - float(len(correct_pairs))/len(cells),
-    'false_discovery': float(len(incorrect_pairs))/len(pairs) if len(pairs)>0 else float('nan'),
-    'freq_mse': np.mean([(f1-f2)**2 for f1,f2 in zip(actual_freqs, pred_freqs)]),
-    'freq_ci_accuracy': np.mean([(f>=f_min and f<=f_max) for f,(f_min,f_max) in zip(actual_freqs, pred_freqs_CI)]),
-    'depth_top': float(len([p for p in pairs if p in top_clones]))/len(top_clones),
-    'depth_tail': float(len([p for p in pairs if p in tail_clones]))/len(tail_clones) if len(tail_clones)>0 else float('nan'),
-    'depth_dual': float(len(correct_dual_pairs))/len(cells_dual) if len(cells_dual)>0 else float('nan'),
-    'false_discovery_dual': float(len(incorrect_dual_pairs))/(len(correct_dual_pairs)+len(incorrect_dual_pairs)) if len(correct_dual_pairs)+len(incorrect_dual_pairs)>0 else float('nan')
+    'num_top_clones': len(true_top_clones),
+    'num_tail_clones': len(true_tail_clones),
+    'num_top_dual_clones': len(true_top_dual_clones),
+    'num_tail_dual_clones': len(true_tail_dual_clones),
+    'num_pred_pairs': len(pairings),
+    'num_pred_pairs_correct': len(correct_pairings),
+    'num_pred_pairs_incorrect': len(incorrect_pairings),
+    'num_pred_clones': len(clones),
+    'num_pred_clones_correct': len(correct_clones),
+    'num_pred_clones_incorrect': len(clones)-len(correct_clones),
+    'num_pred_dual_clones': len(dual_clones),
+    'num_pred_dual_clones_correct': len(correct_dual_clones),
+    'num_pred_dual_clones_incorrect': len(dual_clones)-len(correct_dual_clones),
+    'false_negative_pairs': 1. - float(len(correct_pairings))/len(true_pairings) if len(true_pairings)>0 else float('nan'),
+    'false_negative_clones': 1. - float(len(correct_clones))/len(true_clones) if len(true_clones)>0 else float('nan'),
+    'false_negative_top_clones': 1. - float(len(correct_top_clones))/len(true_top_clones) if len(true_top_clones)>0 else float('nan'),
+    'false_negative_tail_clones': 1. - float(len(correct_tail_clones))/len(true_tail_clones) if len(true_tail_clones)>0 else float('nan'),
+    'false_negative_dual_clones': 1. - float(len(correct_dual_clones))/len(true_dual_clones) if len(true_dual_clones)>0 else float('nan'),
+    'false_negative_top_dual_clones': 1. - float(len(correct_top_dual_clones))/len(true_top_dual_clones) if len(true_top_dual_clones)>0 else float('nan'),
+    'false_negative_tail_dual_clones': 1. - float(len(correct_tail_dual_clones))/len(true_tail_dual_clones) if len(true_tail_dual_clones)>0 else float('nan'),
+    'false_negative_dual_clones_adj': 1. - float(len(correct_dual_clones))/len(candidate_dual_clones) if len(candidate_dual_clones)>0 else float('nan'),
+    'false_negative_top_dual_clones_adj': 1. - float(len(correct_top_dual_clones))/len(candidate_top_dual_clones) if len(candidate_top_dual_clones)>0 else float('nan'),
+    'false_negative_tail_dual_clones_adj': 1. - float(len(correct_tail_dual_clones))/len(candidate_tail_dual_clones) if len(candidate_tail_dual_clones)>0 else float('nan'),
+    'false_discovery_pairs': float(len(incorrect_pairings))/len(pairings) if len(pairings)>0 else float('nan'),
+    'false_discovery_clones': 1. - float(len(correct_clones))/len(clones) if len(clones)>0 else float('nan'),
+    'false_discovery_dual_clones': 1. - float(len(correct_dual_clones))/len(dual_clones) if len(dual_clones)>0 else float('nan'),
+    'freq_mse': np.mean([(f1-f2)**2 for f1,f2 in zip(clone_true_freqs, clone_freqs)]),
+    'freq_ci_accuracy': np.mean([(f>=f_min and f<=f_max) for f,(f_min,f_max) in zip(clone_true_freqs, clone_freqs_CI)]),
   }
 
   print "Solution statistics:"
   print "  Total cells (in system):", stats['num_cells']
+  print "  # clones in top 50%:", stats['num_top_clones']
+  print "  # clones in bottom 50% (tail):", stats['num_tail_clones']
+  print "  Total number of dual-alpha cells:", stats['num_dual_alpha_cells']
+  print "  Total number of dual-beta cells:", stats['num_dual_beta_cells']
   print "  Number of alpha chains (in system):", stats['num_alphas']
   print "  Number of beta chains (in system):", stats['num_betas']
   print "  Number of alpha chains (observed):", stats['num_alphas_obs']
   print "  Number of beta chains (observed):", stats['num_betas_obs']
-  print "  Total pairs identified:", stats['num_pairs']
-  print "  Correct pairs identified: {0} ({1}%)".format(stats['num_pairs_correct'], 100*(1 - stats['false_negative']))
-  print "  Incorrect pairs identified: {0}".format(stats['num_pairs_incorrect'])
-  print "  False discovery rate: {0}%".format(100*stats['false_discovery'])
+  print "  Total pairs identified:", stats['num_pred_pairs']
+  print "  Correct pairs identified: {0} ({1}%)".format(stats['num_pred_pairs_correct'], 100*(1 - stats['false_negative_pairs']))
+  print "  Incorrect pairs identified: {0}".format(stats['num_pred_pairs_incorrect'])
+  print "  False discovery rate (over pairings): {0}%".format(100*stats['false_discovery_pairs'])
+  print "  Total clones identified:", stats['num_pred_clones']
+  print "  Correct clones identified: {} ({}%)".format(stats['num_pred_clones_correct'], 100*(1-stats['false_negative_clones']))
+  print "  Incorrect clones identified:", stats['num_pred_clones_incorrect']
+  print "  False discovery rate (over clonotypes): {0}%".format(100*stats['false_discovery_clones'])
+  print "  Total dual clones identified:", stats['num_pred_dual_clones']
+  print "  Correct dual clones identified: {} ({}%)".format(stats['num_pred_dual_clones_correct'], 100*(1-stats['false_negative_dual_clones']))
+  print "  Incorrect dual clones identified:", stats['num_pred_dual_clones_incorrect']
+  print "  False discovery rate (over dual-chain clonotypes): {0}%".format(100*stats['false_discovery_dual_clones'])
+  print "  Overall depth (over pairs):", 100.*(1-stats['false_negative_pairs'])
+  print "  Overall depth (over clones):", 100.*(1-stats['false_negative_clones'])
+  print "  Depth of top clones:", 100.*(1-stats['false_negative_top_clones'])
+  print "  Depth of tail clones:", 100.*(1-stats['false_negative_tail_clones'])
+  print "  Depth of dual clones:", 100.*(1-stats['false_negative_dual_clones'])
+  print "  Depth of top dual clones:", 100.*(1-stats['false_negative_top_dual_clones'])
+  print "  Depth of tail dual clones:", 100.*(1-stats['false_negative_tail_dual_clones'])
+  print "  Depth of dual clones (adj.):", 100.*(1-stats['false_negative_dual_clones_adj'])
+  print "  Depth of top dual clones (adj.):", 100.*(1-stats['false_negative_top_dual_clones_adj'])
+  print "  Depth of tail dual clones (adj.):", 100.*(1-stats['false_negative_tail_dual_clones_adj'])
+  print "  False dual rate:", 100.*stats['false_discovery_dual_clones']
+
   print "  Mean squared error of frequency guesses: {0}".format(stats['freq_mse'])
   print "  Percent of frequencies within confidence interval: {0}%".format(100.*stats['freq_ci_accuracy'])
-
-  print "  Depth of top clones:", 100.*stats['depth_top']
-  print "  Depth of tail:", 100.*stats['depth_tail']
-  print "  Depth of dual clones (not adjusted):", 100*stats['depth_dual']
-  print "  False dual rate:", 100*stats['false_discovery_dual']
 
   print
 
@@ -132,36 +189,11 @@ def stats_440(data, results):
   return stats_Lee(data, results)
 
 
-def generate_cells(num_cells, max_alphas=None, max_betas=None):
-  if max_alphas == None:  max_alphas = num_cells
-  if max_betas == None:  max_betas = num_cells
-
-  # Generate the degree for each alpha- and beta-chain from a given distribution
-  a_sharing_probs=[0.816,0.085,0.021,0.007,0.033,0.005,0.033]
-  b_sharing_probs=[0.859,0.076,0.037,0.019,0.009]
-  #[0.8375, 0.0805, 0.029, 0.013, 0.021, 0.0025, 0.0165] # Averages from the Lee et al. paper
-  adegs = np.random.choice(range(1,len(a_sharing_probs)+1), max_alphas, replace=True, p=a_sharing_probs)
-  bdegs = np.random.choice(range(1,len(b_sharing_probs)+1), max_betas, replace=True, p=b_sharing_probs)
-  
-  # If you want to generate from a power law instead (not sure if this works as expected)
-  #adegs = np.floor(np.random.pareto(2.1, size=max_alphas))+1
-  #bdegs = np.floor(np.random.pareto(2.1, size=max_alphas))+1
-
-  # Cut off at the desired number of cells
-  alphas = sum([[(i,)]*int(n) for i,n in enumerate(adegs)],[])[:num_cells] # this truncation will skew the distro a bit
-  betas = sum([[(i,)]*int(n) for i,n in enumerate(bdegs)], [])[:num_cells]
-
-  # Randomly assign alpha- and beta-chains to each other
-  np.random.shuffle(alphas)
-  np.random.shuffle(betas)
-  cells = list(set(zip(alphas, betas))) # Due to chance duplicates, there may be slightly less than num_cells cells
-  # (A slightly more complex method could be used to ensure exactly num_cells cells)
-
-  return cells
 
 def generate_sequencing_data(num_cells, **seq_gen_args):
   gen = SG(**seq_gen_args)
-  gen.cells = SG.generate_cells(num_cells)
+  gen.cells = SG.generate_cells(num_cells, alpha_dual_prob=0.3, beta_dual_prob=0.06)
+  #gen.cells = SG.generate_cells(num_cells, alpha_dual_prob=0.0, beta_dual_prob=0.00)
   #gen.set_cell_frequency_distribution(distro_type='explicit', frequencies=generate_cell_freqs(len(gen.cells),50))
 
   print "Generated data with the following parameters:"
@@ -187,9 +219,9 @@ def generate_sequencing_data(num_cells, **seq_gen_args):
   
 
 tests = [
-  (5, 
+  (10, 
    generate_sequencing_data,
-   {'num_cells': 1000,
+   {'num_cells': 2100,
     'chain_deletion_prob': 0.15,
     'num_wells': 96*5,
     'cells_per_well_distribution': 'constant',
@@ -197,11 +229,14 @@ tests = [
     'cell_frequency_distribution': 'Lee',
     'cell_frequency_distribution_params': {'n_s': 50}
    },
-   ((run_Lee, {'pair_threshold': 0.9}, stats_Lee),
+   ((run_Lee, {'pair_threshold': 0.3}, stats_Lee),)
 #    (run_Lee, {'pair_threshold': 0.6}, stats_Lee),
 #    (run_Lee, {'pair_threshold': 0.3}, stats_Lee),
-    (run_440, {'pair_threshold': 0.90}, stats_440))
+#    (run_440, {'pair_threshold': 0.90}, stats_440))
   )
 ]
         
-results = run_tests(tests)
+#results = run_tests(tests)
+data=tests[0][1](**tests[0][2])
+res=tests[0][3][0][0](data, **tests[0][3][0][1])
+tests[0][3][0][2](data, res)

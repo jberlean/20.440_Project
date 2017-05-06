@@ -1,8 +1,10 @@
 import random
 import sys
 
+import itertools as it
+
 import numpy as np
-import scipy.optimize, scipy.misc
+import scipy.optimize, scipy.misc, scipy.cluster
 
 def extract_chains(seq_data):
   alphas_per_well, betas_per_well = zip(*seq_data.well_data)
@@ -78,22 +80,48 @@ def solve(seq_data, iters=100, pair_threshold = 0.9):
 
   overall_good_pairs = [pair for pair in overall_pairing_counts if overall_pairing_counts[pair]>=pair_threshold*iters]
 
-  # Turns pairs of associated alpha- and beta- chains into cells that may have dual alpha chains
-  #cells = pairs_to_cells(seq_data, overall_good_pairs) 
+  pairs = [(all_alphas[a], all_betas[b]) for a,b in overall_good_pairs]
 
-  cells = [((all_alphas[a_idx],), (all_betas[b_idx],)) for a_idx,b_idx in overall_good_pairs]
-  cell_freqs, cell_freq_CIs = estimate_cell_frequencies(seq_data, cells)
+  # Turns pairs of associated alpha- and beta- chains into cells that may have dual alpha chains
+  cells, cell_freqs, cell_freqs_CI = pairs_to_cells(seq_data, pairs) 
 
 
   results = {
     'cells': cells,
     'cell_frequencies': cell_freqs,
-    'cell_frequencies_CI': cell_freq_CIs
+    'cell_frequencies_CI': cell_freqs_CI
   }
 
   return results
 
 def estimate_cell_frequencies(seq_data, cells):
+
+  def log_likelihood_func(f, N, W, K, Q_memo = {}, error_rate=10**-1, is_dual=False):
+    # Note: See Eqs (3) and (4) in Lee et al. for explanation of variables
+  
+    # Compute Q vector if not previously computed
+    Q_key = (tuple(N), tuple(W), error_rate, f, is_dual)
+    if Q_key not in Q_memo:
+      Q = []
+      if not is_dual:
+        prefactor = lambda m: 2*error_rate**m - error_rate**(2*m)
+      else:
+        prefactor = lambda m: 3*error_rate**m - 3*error_rate**(2*m) + error_rate**(3*m)
+      for n,w in zip(N,W):
+        q = (1-f)**n + sum([
+            prefactor(m) * scipy.misc.comb(n,m) * (f**m) * (1-f)**(n-m) 
+        for m in range(1, n+1)])
+        Q.append(q)
+      Q_memo[Q_key] = Q
+  
+    # Retrieve Q from memoized dict of Q's
+    # Note that Q only depends on N, W, error_rate, f, and is_dual
+    Q = Q_memo[Q_key]
+  
+    # Compute log likelihood as sum of Binomial probabilities
+    # Note that the "combinations" in the binomial PDF is ignored as it does not affect
+    # the location of the maximum
+    return sum([np.log(scipy.misc.comb(w,k)) + k*np.log((1-q)) + (w-k)*np.log(q) for w,k,q in zip(W,K,Q)])
 
   cells_per_well, N, W = extract_cells_per_well(seq_data)
 
@@ -101,8 +129,8 @@ def estimate_cell_frequencies(seq_data, cells):
 
   cell_freqs = []
   cell_freq_CIs = []
-  for ((a_idx,), (b_idx,)), k in zip(cells, K):
-    L_func = lambda f: log_likelihood_func(f, a_idx, b_idx, N, W, k)
+  for (alist, blist), k in zip(cells, K):
+    L_func = lambda f: log_likelihood_func(f, N, W, k, is_dual=len(alist)>1)
 
     # Find maximal likelihood
     f_opt = scipy.optimize.minimize_scalar(lambda f: -L_func(f), method='Bounded', bounds=(0,1)).x
@@ -120,21 +148,193 @@ def estimate_cell_frequencies(seq_data, cells):
   return cell_freqs, cell_freq_CIs
 
 def pairs_to_cells(seq_data, pairs):
-  cells = [((a,),(b,)) for a,b in pairs] # list of all cells, will be modified as duals are found
+  def find_duals_likelihood(candidate_duals, freqs_dict, well_size_cutoff = 50, error_rate=10**-1):
+    cells_per_well, N, W = extract_cells_per_well(seq_data)
+
+    duals = []
+    for alist, blist in candidate_duals:
+      cells_temp = [((alist[0],), blist), ((alist[1],), blist), (alist, ()), (alist, blist)]
+      #print "", cells_temp
+      K = extract_cell_counts(seq_data, cells_temp, cells_per_well, N, W)
+      #print "", K
+
+      # Extract individual cell counts (see Lee et al., SI, Section 5 for explanation of variables)
+      K_1 = K[0]
+      K_2 = K[1]
+      K_3 = K[2]
+      K_d = K[3]
+      K_o = [w-k1-k2-k3-kd for w,k1,k2,k3,kd in zip(W, K_1, K_2, K_3, K_d)]
+
+      # Extract relevant cell frequencies
+      f_q = freqs_dict[cells_temp[0]]
+      f_r = freqs_dict[cells_temp[1]]
+      f_d = freqs_dict[cells_temp[3]]
+
+      # Null hypothesis (no dual clone)
+      log_fact = lambda x: scipy.special.gammaln(x+1)
+
+      # disgusting calculations
+      null_P_a1b = [
+        sum([
+          scipy.misc.comb(n, k) * f_q**k * (1-f_q-f_r)**(n-k) * (1-error_rate**k)**2
+          for k in range(1, n+1)
+        ]) +
+        sum([
+          np.exp(log_fact(n) - log_fact(n_1) - log_fact(n_2) - log_fact(n-n_1-n_2) + n_1*np.log(f_q) + n_2*np.log(f_r) + (n-n_1-n_2)*np.log(1-f_q-f_r) + 2*np.log(1-error_rate**n_1) + n_2*np.log(error_rate))
+          for n_1 in range(1, n) for n_2 in range(1, n-n_1+1)
+        ]) +
+        sum([
+          np.exp(log_fact(n) - log_fact(n_1) - log_fact(n_2) - log_fact(n-n_1-n_2) + n_1*np.log(f_q) + n_2*np.log(f_r) + (n-n_1-n_2)*np.log(1-f_q-f_r) + np.log(1-error_rate**n_1) + n_1*np.log(error_rate) + np.log(1-error_rate**n_2) + n_2*np.log(error_rate))
+          for n_1 in range(1, n) for n_2 in range(1, n-n_1+1)
+        ])
+        for n in N if n<well_size_cutoff
+      ]
+      null_P_a2b = [
+        sum([
+          scipy.misc.comb(n, k) * f_r**k * (1-f_q-f_r)**(n-k) * (1-error_rate**k)**2
+          for k in range(1, n+1)
+        ]) +
+        sum([
+          np.exp(log_fact(n) - log_fact(n_1) - log_fact(n_2) - log_fact(n-n_1-n_2) + n_1*np.log(f_r) + n_2*np.log(f_q) + (n-n_1-n_2)*np.log(1-f_q-f_r) + 2*np.log(1-error_rate**n_2) + n_1*np.log(error_rate))
+          for n_2 in range(1, n) for n_1 in range(1, n-n_2+1)
+        ]) +
+        sum([
+          np.exp(log_fact(n) - log_fact(n_1) - log_fact(n_2) - log_fact(n-n_1-n_2) + n_1*np.log(f_r) + n_2*np.log(f_q) + (n-n_1-n_2)*np.log(1-f_q-f_r) + np.log(1-error_rate**n_1) + n_1*np.log(error_rate) + np.log(1-error_rate**n_2) + n_2*np.log(error_rate))
+          for n_2 in range(1, n) for n_1 in range(1, n-n_2+1)
+        ])
+        for n in N if n<well_size_cutoff
+      ]
+      null_P_a1a2 = [
+        sum([
+          np.exp(log_fact(n) - log_fact(n_1) - log_fact(n_2) - log_fact(n-n_1-n_2) + n_1*np.log(f_q) + n_2*np.log(f_r) + (n-n_1-n_2)*np.log(1-f_q-f_r) + n_1*np.log(error_rate) + np.log(1-error_rate**n_1) + n_2*np.log(error_rate) + np.log(1-error_rate**n_2))
+          for n_1 in range(1,n) for n_2 in range(1, n-n_1+1)
+        ])
+        for n in N if n<well_size_cutoff
+      ]
+      null_P_a1a2b = [
+        sum([
+          np.exp(log_fact(n) - log_fact(n_1) - log_fact(n_2) - log_fact(n-n_1-n_2)) * f_q**n_1 * f_r**n_2 * (1-f_q-f_r)**(n-n_1-n_2) * (
+            error_rate**n_1*(1-error_rate**n_1)*(1-error_rate**n_2)**2 +
+            (1-error_rate**n_1)**2*(1-error_rate**n_2)**2 +
+            (1-error_rate**n_1)**2*error_rate**n_2*(1-error_rate**n_2)
+          )
+          for n_1 in range(1,n) for n_2 in range(1, n-n_1+1)
+        ])
+        for n in N if n<well_size_cutoff
+      ]
+      null_P_other = [1-p1-p2-p3-pd for p1,p2,p3,pd in zip(null_P_a1b, null_P_a2b, null_P_a1a2, null_P_a1a2b)]
+        
+      null_log_likelihood = sum([
+        log_fact(w) - log_fact(k1) - log_fact(k2) - log_fact(k3) - log_fact(kd) - log_fact(ko) + k1*np.log(p1) + k2*np.log(p2) + k3*np.log(p3) + kd*np.log(pd) + ko*np.log(po)
+        for w,k1,k2,k3,kd,ko,p1,p2,p3,pd,po in zip(W, K_1, K_2, K_3, K_d, K_o, null_P_a1b, null_P_a2b, null_P_a1a2, null_P_a1a2b, null_P_other)
+      ])
+
+      # Alternative hypothesis (dual clone a1a2b)
+      alt_P_2 = [
+        sum([
+          scipy.misc.comb(n, k) * f_d**k * (1-f_d)**(n-k) * error_rate**k * (1-error_rate**k)**2
+          for k in range(1, n+1)
+        ])
+        for n in N if n<well_size_cutoff
+      ]
+      alt_P_3 = [
+        sum([
+          scipy.misc.comb(n,k) * f_d**k * (1-f_d)**(n-k) * (1-error_rate**k)**3
+          for k in range(1, n+1)
+        ])
+        for n in N if n<well_size_cutoff
+      ]
+      alt_P_other = [1 - 3*p1 - p2 for p1,p2 in zip(alt_P_2, alt_P_3)]
+
+      alt_log_likelihood = sum([
+        log_fact(w) - log_fact(k1) - log_fact(k2) - log_fact(k3) - log_fact(kd) - log_fact(ko) + (k1+k2+k3)*np.log(p1) + kd*np.log(p2) + ko*np.log(po)
+        for w,k1,k2,k3,kd,ko,p1,p2,po in zip(W, K_1, K_2, K_3, K_d, K_o, alt_P_2, alt_P_3, alt_P_other)
+      ])
+
+      if alt_log_likelihood - null_log_likelihood >= 10:
+        duals.append(cells_temp[3])
+
+    return duals
+
+  def find_duals_clustering(candidate_duals, freqs_dict):
+    if len(candidate_duals) < 2:
+      return []
+
+    # Preliminaries
+    cells_per_well, N, W = extract_cells_per_well(seq_data)
+    K = extract_cell_counts(seq_data, candidate_duals, cells_per_well, N, W)
+
+    # Compute ratio statistics
+    R = []
+    for (alist, blist), K_row in zip(candidate_duals, K):
+      f1 = freqs_dict[((alist[0],), blist)]
+      f2 = freqs_dict[((alist[1],), blist)]
+      expected = sum([
+        w*(1 - (1-f1)**n - (1-f2)**n + (1-f1-f2)**n)
+        for n,w in zip(N,W)
+      ])
+      R.append(float(sum(K_row))/expected)
+
+    # Perform clustering based on R
+    centroids = sorted(scipy.cluster.vq.kmeans(R, 2)[0])
+    if len(centroids)==1:  return []
+
+    C_nondual, C_dual = centroids
+    
+    # Filter cells based on how close R is to C_dual vs. C_nondual
+    duals = []
+    print centroids
+    for candidate, r in zip(candidate_duals, R):
+      print r, candidate
+      if np.abs(r-C_dual) < np.abs(r-C_nondual):
+        duals.append(candidate)
+    
+    return duals
+    
+
+  candidate_non_duals = [((a,),(b,)) for a,b in pairs] # list of all cells, will be modified as duals are found
+  cells = candidate_non_duals[:]
+  #print pairs
 
   # Determine candidate dual cells
   # Note that only dual alpha-chains are considered by the Lee et al. technique
   candidate_duals = []
   beta_pairings = {}
-  for a,b in non_dual_cells:
-    beta_pairings[b] = beta_pairings.get(b, [])
+  for a,b in pairs:
+    beta_pairings[b] = beta_pairings.get(b, []) + [a]
   for b,alist in beta_pairings.iteritems():
     if len(alist) >= 2:
-      candidate_duals.extend(it.product(it.combinations(alist, 2), (b,)))
+      alist = sorted(alist)
+      candidate_duals.extend(it.product(it.combinations(alist, 2), [(b,)]))
 
-  # Find duals using simple method, which is computationally infeasible with wells with >50 cells
+  #print beta_pairings
+
+  # Estimate frequencies of all potential cells
+  freqs_list, freqs_CI_list = estimate_cell_frequencies(seq_data, candidate_non_duals + candidate_duals)
+  freqs_dict = {c: f for c,f in zip(candidate_non_duals+candidate_duals, freqs_list)}
+  freqs_CI_dict = {c: f for c,f in zip(candidate_non_duals+candidate_duals, freqs_CI_list)}
   
+  # Find duals using likelihood method, which is computationally infeasible with wells with >50 cells
+  likelihood_duals = find_duals_likelihood(candidate_duals, freqs_dict)
+  #print "Likelihood duals", likelihood_duals
+
+  # Find duals using clustering method, which works better lower-frequency cells
+  clustering_duals = find_duals_clustering(candidate_duals, freqs_dict)
+  #print "Clustering duals", clustering_duals
+
+  # Remove non-dual counterparts for each dual cell found and add in corresponding dual cell
+  duals = list(set(likelihood_duals + clustering_duals))
+  for alist,blist in duals:
+    if ((alist[0],), blist) in cells:
+      cells.remove(((alist[0],), blist))
+    if ((alist[1],), blist) in cells:
+      cells.remove(((alist[1],), blist))
+    cells.append((alist, blist))
   
+  cell_freqs = [freqs_dict[c] for c in cells]
+  cell_freqs_CI = [freqs_CI_dict[c] for c in cells]
+
+  return cells, cell_freqs, cell_freqs_CI
   
 
 ## Auxiliary functions to help out pairs_to_cells() and estimate_cell_frequencies()
@@ -171,25 +371,3 @@ def extract_cell_counts(seq_data, cells, cells_per_well, N, W):
 
   return K
 
-def log_likelihood_func(f, a_idx, b_idx, N, W, K, Q_memo = {}, error_rate=10**-1):
-  # Note: See Eqs (3) and (4) in Lee et al. for explanation of variables
-
-  # Compute Q vector if not previously computed
-  Q_key = (tuple(N), tuple(W), error_rate, f)
-  if Q_key not in Q_memo:
-    Q = []
-    for n,w in zip(N,W):
-      q = (1-f)**n + sum([
-          (2*error_rate**m - error_rate**(2*m)) * scipy.misc.comb(n,m) * (f**m) * (1-f)**(n-m) 
-      for m in range(1, n+1)])
-      Q.append(q)
-    Q_memo[Q_key] = Q
-
-  # Retrieve Q from memoized dict of Q's
-  # Note that Q only depends on N, W, error_rate, and f
-  Q = Q_memo[Q_key]
-
-  # Compute log likelihood as sum of Binomial probabilities
-  # Note that the "combinations" in the binomial PDF is ignored as it does not affect
-  # the location of the maximum
-  return sum([np.log(scipy.misc.comb(w,k)) + k*np.log((1-q)) + (w-k)*np.log(q) for w,k,q in zip(W,K,Q)])
