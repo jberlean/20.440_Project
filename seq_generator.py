@@ -140,8 +140,8 @@ class SequencingGenerator(object):
     np.random.shuffle(alphas)
     np.random.shuffle(betas)
     for i in range(num_cells):
-      if adual[i]==2:  alphas[i:i+2] = [alphas[i]+alphas[i+1]]
-      if bdual[i]==2:  betas[i:i+2] = [betas[i]+betas[i+1]]
+      if adual[i]==2:  alphas[i:i+2] = [tuple(sorted(alphas[i]+alphas[i+1]))]
+      if bdual[i]==2:  betas[i:i+2] = [tuple(sorted(betas[i]+betas[i+1]))]
     cells = list(set(zip(alphas, betas))) # Due to random duplicates, there may be slightly less than num_cells cells
     # (A slightly more complex method could be used to ensure exactly num_cells cells)
 
