@@ -1,13 +1,8 @@
 
-from solver_Lee import solve as lee_solve
-from solver_440 import solve as new_solve
-from seq_generator import SequencingGenerator as SeqGen
-from seq_data import SequencingData
 import numpy as np
 from datetime import datetime
 
-print 'Finished!'
-
+# This library consists of graphical tools that may be useful to visualize results
 
 def assess_performance(results,data):
     pairs = results['cells']
@@ -39,61 +34,6 @@ def assess_performance(results,data):
     print "  Incorrect pairs identified: {0}".format(len(incorrect_pairs))
     print "  False discovery rate: {0}%".format(100.*len(incorrect_pairs)/len(pairs))
     print "  Mean squared error of frequency guesses: {0}".format(np.mean([(f1-f2)**2 for f1,f2 in zip(actual_freqs, pred_freqs)]))
-
+    
 def graphical_comparison(results1,results2):
     pass
-    
-'''
-Generate landscapes
-'''
-
-gen = SeqGen()
-
-'''
-Set distributions
-'''
-
-w_tot = 50
-
-gen.set_cell_frequency_distribution('Lee')
-gen.set_options(chain_misplacement_prob=0,chain_deletion_prob=10**-1)
-#gen.chain_misplacement_prob = 10**5 # Prob of a chain migrating to another well
-#gen.chain_deletion_prob = 10**5 # Prob of a chain failing to be amplified
-
-gen.num_wells = w_tot
-
-# Make SequencingGenerator object
-gen.set_cells_per_well('constant', cells_per_well=50)
-#gen.set_cells_per_well('poisson', lam=100)
-
-#gen.cells = SeqGen.generate_cells_lee(600)
-gen.cells = SeqGen.generate_cells(300)
-#cells += SeqGen.generate_cells(250, 2, 1, alpha_start_idx=250, beta_start_idx=251) 
-#cells += SeqGen.generate_cells(250, 1, 2, alpha_start_idx=2000, beta_start_idx=2000) 
-#gen.cells = cells
-
-## Save data to a file
-data = gen.generate_data()
-data.save_data('patrick_testing.txt')
-
-print 'Finished!'
-
-
-startTime = datetime.now()
-new_results = new_solve(data,pair_threshold=0.995,verbose=2) # not stringent
-print 'PHASOR took {} seconds.\n'.format(datetime.now()-startTime)
-
-startTime = datetime.now()
-lee_results = lee_solve(data,pair_threshold=0.1) # not stringent
-print 'Lee took {} seconds.\n'.format(datetime.now()-startTime)
-
-print '\nPHASOR Performance:'
-assess_performance(new_results,data)
-
-print '\nLEE Performance:'
-assess_performance(lee_results,data)
-
-
-
-
-
