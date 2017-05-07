@@ -267,7 +267,7 @@ def pairs_to_cells(seq_data, pairs):
         w*(1 - (1-f1)**n - (1-f2)**n + (1-f1-f2)**n)
         for n,w in zip(N,W)
       ])
-      print (alist, blist), f1, f2, sum(K_row), expected
+      #print (alist, blist), f1, f2, sum(K_row), expected
       R.append(float(sum(K_row))/expected)
 
     # Perform clustering based on R
@@ -278,7 +278,7 @@ def pairs_to_cells(seq_data, pairs):
     
     # Filter cells based on how close R is to C_dual vs. C_nondual
     duals = []
-    print centroids
+    #print centroids
     for candidate, r in zip(candidate_duals, R):
       if np.abs(r-C_dual) < np.abs(r-C_nondual):
         duals.append(candidate)
