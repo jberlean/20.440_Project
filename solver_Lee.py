@@ -15,16 +15,10 @@ def solve(seq_data, iters=100, pair_threshold = 0.9):
   def compute_well_pairings(alpha_idx, beta_idx, scores):
     # Reformulate problem as a general assignment problem
     # Then apply Hungarian algorithm
+    # Indices in the results of running Hungarian are transformed back into alpha/beta chain ids
     ratings = [[-scores[i][j] for j in beta_idx] for i in alpha_idx]
-    #assignment = solve_general_assignment(ratings)
     pairings = [(alpha_idx[i], beta_idx[j]) for i,j in zip(*scipy.optimize.linear_sum_assignment(ratings))]
 
-    # Transform back into alpha- and beta-chain pairings
-#    pairings = []
-#    for i, row in enumerate(assignment):
-#      for j, v in enumerate(row):
-#        if v:  pairings.append((alpha_idx[i], beta_idx[j]))
-#
     return pairings
   
   # Extract all distinct alpha- and beta-chains observed
@@ -37,19 +31,9 @@ def solve(seq_data, iters=100, pair_threshold = 0.9):
   # Transform all well data to reference alpha- and beta-chains by index
   well_data = [[[alpha_to_idx[a] for a in data[0]], [beta_to_idx[b] for b in data[1]]] for data in seq_data.well_data]
 
-  # Calculate association scores
-  S = [[0 for j in range(len(all_betas))] for i in range(len(all_alphas))]
-  for well in well_data:
-    well_alpha_idx, well_beta_idx = well
-    increment = 1./len(well_alpha_idx) + 1./len(well_beta_idx)
-    for a_idx in well_alpha_idx:
-      for b_idx in well_beta_idx:
-        S[a_idx][b_idx] += increment
 
   overall_pairing_counts = {}
-  well_pairings = [None]*len(well_data)
-  percent_done = 0.0
-  for i in range(iters):
+  for iter in range(iters):
     # Choose random subset of wells for this iter
     # Loop is to ensure that subset size is greater than 0 (can happen w/ small well count)
     #wells_idx = []
@@ -57,18 +41,22 @@ def solve(seq_data, iters=100, pair_threshold = 0.9):
     # Actually, each random subset is constant fraction (0.75) of all wells
     wells_idx = np.random.choice(range(len(well_data)), int(0.75*len(well_data)), replace=False)
     
+    # Calculate association scores
+    S = [[0 for j in range(len(all_betas))] for i in range(len(all_alphas))]
+    for well_idx in wells_idx:
+      well_alpha_idx, well_beta_idx = well_data[well_idx]
+      increment = 1./len(well_alpha_idx) + 1./len(well_beta_idx)
+      for a_idx in well_alpha_idx:
+        for b_idx in well_beta_idx:
+          S[a_idx][b_idx] += increment
 
     # Compute well pairings for any well, if it hasn't been done already
     # Then accumulate the number of times each pair has been assigned in a well pairing
     pairing_counts = {}
-    for well_idx in wells_idx:
-      if well_pairings[well_idx] == None:
-        well_pairings[well_idx] = compute_well_pairings(*well_data[well_idx], scores=S)
-        percent_done += 100./len(well_pairings)
-        print "Computing likely pairings... {0}%\r".format(int(percent_done)),
-        if well_idx == 0:
-          print [(well_data[0][0].index(a), well_data[0][1].index(b)) for a,b in well_pairings[well_idx]]
-      for a,b in well_pairings[well_idx]:
+    for idx, well_idx in enumerate(wells_idx):
+      well_pairings = compute_well_pairings(*well_data[well_idx], scores=S)
+      #print "Computing likely pairings... {0}%\r".format(int(100*((iter+1) + float(idx)/len(wells_idx))/iters)),
+      for a,b in well_pairings:
         pairing_counts[(a,b)] = pairing_counts.get((a,b), 0) + 1
 
     # Compute filter cutoff (average of all nonzero pair counts)
@@ -81,10 +69,10 @@ def solve(seq_data, iters=100, pair_threshold = 0.9):
     for pair in good_pairs:
       overall_pairing_counts[pair] = overall_pairing_counts.get(pair, 0) + 1
 
-  for (a,b),c in overall_pairing_counts.items()[:100]:
-    print (all_alphas[a], all_betas[b]), float(c)/iters
+    print "Computing likely pairings... {0}%\r".format(100*(iter+1)/iters),
+    sys.stdout.flush()
+
   overall_good_pairs = [pair for pair in overall_pairing_counts if overall_pairing_counts[pair]>=pair_threshold*iters]
-  return {(all_alphas[a], all_betas[b]): i for (a,b), i in overall_pairing_counts.iteritems()}
 
   pairs = [(all_alphas[a], all_betas[b]) for a,b in overall_good_pairs]
 
