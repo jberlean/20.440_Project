@@ -13,19 +13,18 @@ def extract_chains(seq_data):
 def solve(seq_data, iters=100, pair_threshold = 0.9):
   ## Computes a solution to the alpha-beta pairing problem, using the methods in Lee et al. (2017)
   def compute_well_pairings(alpha_idx, beta_idx, scores):
-    from hungarian import solve_general_assignment
-    
     # Reformulate problem as a general assignment problem
     # Then apply Hungarian algorithm
-    ratings = [[int(scores[i][j]*10000) for j in beta_idx] for i in alpha_idx]
-    assignment = solve_general_assignment(ratings)
+    ratings = [[-scores[i][j] for j in beta_idx] for i in alpha_idx]
+    #assignment = solve_general_assignment(ratings)
+    pairings = [(alpha_idx[i], beta_idx[j]) for i,j in zip(*scipy.optimize.linear_sum_assignment(ratings))]
 
     # Transform back into alpha- and beta-chain pairings
-    pairings = []
-    for i, row in enumerate(assignment):
-      for j, v in enumerate(row):
-        if v:  pairings.append((alpha_idx[i], beta_idx[j]))
-
+#    pairings = []
+#    for i, row in enumerate(assignment):
+#      for j, v in enumerate(row):
+#        if v:  pairings.append((alpha_idx[i], beta_idx[j]))
+#
     return pairings
   
   # Extract all distinct alpha- and beta-chains observed
@@ -53,8 +52,10 @@ def solve(seq_data, iters=100, pair_threshold = 0.9):
   for i in range(iters):
     # Choose random subset of wells for this iter
     # Loop is to ensure that subset size is greater than 0 (can happen w/ small well count)
-    wells_idx = []
-    while len(wells_idx)==0:  wells_idx = [i for i in range(len(well_data)) if random.random()>0.5]
+    #wells_idx = []
+    #while len(wells_idx)==0:  wells_idx = [i for i in range(len(well_data)) if random.random()>0.5]
+    # Actually, each random subset is constant fraction (0.75) of all wells
+    wells_idx = np.random.choice(range(len(well_data)), int(0.75*len(well_data)), replace=False)
     
 
     # Compute well pairings for any well, if it hasn't been done already
@@ -65,20 +66,25 @@ def solve(seq_data, iters=100, pair_threshold = 0.9):
         well_pairings[well_idx] = compute_well_pairings(*well_data[well_idx], scores=S)
         percent_done += 100./len(well_pairings)
         print "Computing likely pairings... {0}%\r".format(int(percent_done)),
+        if well_idx == 0:
+          print [(well_data[0][0].index(a), well_data[0][1].index(b)) for a,b in well_pairings[well_idx]]
       for a,b in well_pairings[well_idx]:
         pairing_counts[(a,b)] = pairing_counts.get((a,b), 0) + 1
 
     # Compute filter cutoff (average of all nonzero pair counts)
-    cutoff = float(sum(pairing_counts.values()))/len(pairing_counts.keys())
+    cutoff = np.mean(pairing_counts.values())
 
     # Extract all pairs with counts exceeding the cutoff
-    good_pairs = [pair for pair in pairing_counts if pairing_counts[pair]>=cutoff]
+    good_pairs = [pair for pair in pairing_counts if pairing_counts[pair]>cutoff]
 
     # For each pair exceeding the cutoff, increment the overall_pairing_counts number
     for pair in good_pairs:
       overall_pairing_counts[pair] = overall_pairing_counts.get(pair, 0) + 1
 
+  for (a,b),c in overall_pairing_counts.items()[:100]:
+    print (all_alphas[a], all_betas[b]), float(c)/iters
   overall_good_pairs = [pair for pair in overall_pairing_counts if overall_pairing_counts[pair]>=pair_threshold*iters]
+  return {(all_alphas[a], all_betas[b]): i for (a,b), i in overall_pairing_counts.iteritems()}
 
   pairs = [(all_alphas[a], all_betas[b]) for a,b in overall_good_pairs]
 
@@ -96,7 +102,7 @@ def solve(seq_data, iters=100, pair_threshold = 0.9):
 
 def estimate_cell_frequencies(seq_data, cells):
 
-  def log_likelihood_func(f, N, W, K, Q_memo = {}, error_rate=10**-1, is_dual=False):
+  def log_likelihood_func(f, N, W, K, Q_memo = {}, error_rate=0.15, is_dual=False):
     # Note: See Eqs (3) and (4) in Lee et al. for explanation of variables
   
     # Compute Q vector if not previously computed
@@ -148,7 +154,7 @@ def estimate_cell_frequencies(seq_data, cells):
   return cell_freqs, cell_freq_CIs
 
 def pairs_to_cells(seq_data, pairs):
-  def find_duals_likelihood(candidate_duals, freqs_dict, well_size_cutoff = 50, error_rate=10**-1):
+  def find_duals_likelihood(candidate_duals, freqs_dict, well_size_cutoff = 50, error_rate=0.15):
     cells_per_well, N, W = extract_cells_per_well(seq_data)
 
     duals = []
@@ -273,6 +279,7 @@ def pairs_to_cells(seq_data, pairs):
         w*(1 - (1-f1)**n - (1-f2)**n + (1-f1-f2)**n)
         for n,w in zip(N,W)
       ])
+      print (alist, blist), f1, f2, sum(K_row), expected
       R.append(float(sum(K_row))/expected)
 
     # Perform clustering based on R
@@ -285,7 +292,6 @@ def pairs_to_cells(seq_data, pairs):
     duals = []
     print centroids
     for candidate, r in zip(candidate_duals, R):
-      print r, candidate
       if np.abs(r-C_dual) < np.abs(r-C_nondual):
         duals.append(candidate)
     
