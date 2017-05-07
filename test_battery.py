@@ -192,8 +192,8 @@ def stats_440(data, results):
 
 def generate_sequencing_data(num_cells, **seq_gen_args):
   gen = SG(**seq_gen_args)
-  gen.cells = SG.generate_cells(num_cells, alpha_dual_prob=0.3, beta_dual_prob=0.06)
-  #gen.cells = SG.generate_cells(num_cells, alpha_dual_prob=0.0, beta_dual_prob=0.00)
+  #gen.cells = SG.generate_cells(num_cells, alpha_dual_prob=0.3, beta_dual_prob=0.06)
+  gen.cells = SG.generate_cells(num_cells, alpha_dual_prob=0.0, beta_dual_prob=0.00)
   #gen.set_cell_frequency_distribution(distro_type='explicit', frequencies=generate_cell_freqs(len(gen.cells),50))
 
   print "Generated data with the following parameters:"
@@ -229,14 +229,14 @@ tests = [
     'cell_frequency_distribution': 'Lee',
     'cell_frequency_distribution_params': {'n_s': 50}
    },
-   ((run_Lee, {'pair_threshold': 0.3}, stats_Lee),)
+   ((run_Lee, {'pair_threshold': 0.3, 'iters':50}, stats_Lee),)
 #    (run_Lee, {'pair_threshold': 0.6}, stats_Lee),
 #    (run_Lee, {'pair_threshold': 0.3}, stats_Lee),
 #    (run_440, {'pair_threshold': 0.90}, stats_440))
   )
 ]
         
-#results = run_tests(tests)
-data=tests[0][1](**tests[0][2])
-res=tests[0][3][0][0](data, **tests[0][3][0][1])
-tests[0][3][0][2](data, res)
+results = run_tests(tests)
+#data=tests[0][1](**tests[0][2])
+#res=tests[0][3][0][0](data, **tests[0][3][0][1])
+#tests[0][3][0][2](data, res)
