@@ -308,22 +308,22 @@ def pairs_to_cells(seq_data, pairs):
   freqs_dict = {c: f for c,f in zip(candidate_non_duals+candidate_duals, freqs_list)}
   freqs_CI_dict = {c: f for c,f in zip(candidate_non_duals+candidate_duals, freqs_CI_list)}
   
-  # Find duals using likelihood method, which is computationally infeasible with wells with >50 cells
-  likelihood_duals = find_duals_likelihood(candidate_duals, freqs_dict)
-  #print "Likelihood duals", likelihood_duals
-
-  # Find duals using clustering method, which works better lower-frequency cells
-  clustering_duals = find_duals_clustering(candidate_duals, freqs_dict)
-  #print "Clustering duals", clustering_duals
-
-  # Remove non-dual counterparts for each dual cell found and add in corresponding dual cell
-  duals = list(set(likelihood_duals + clustering_duals))
-  for alist,blist in duals:
-    if ((alist[0],), blist) in cells:
-      cells.remove(((alist[0],), blist))
-    if ((alist[1],), blist) in cells:
-      cells.remove(((alist[1],), blist))
-    cells.append((alist, blist))
+#  # Find duals using likelihood method, which is computationally infeasible with wells with >50 cells
+#  likelihood_duals = find_duals_likelihood(candidate_duals, freqs_dict)
+#  #print "Likelihood duals", likelihood_duals
+#
+#  # Find duals using clustering method, which works better lower-frequency cells
+#  clustering_duals = find_duals_clustering(candidate_duals, freqs_dict)
+#  #print "Clustering duals", clustering_duals
+#
+#  # Remove non-dual counterparts for each dual cell found and add in corresponding dual cell
+#  duals = list(set(likelihood_duals + clustering_duals))
+#  for alist,blist in duals:
+#    if ((alist[0],), blist) in cells:
+#      cells.remove(((alist[0],), blist))
+#    if ((alist[1],), blist) in cells:
+#      cells.remove(((alist[1],), blist))
+#    cells.append((alist, blist))
   
   cell_freqs = [freqs_dict[c] for c in cells]
   cell_freqs_CI = [freqs_CI_dict[c] for c in cells]
