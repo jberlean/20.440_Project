@@ -181,8 +181,8 @@ def directional_matches(img_ab,img_a,img_b,a_uniques,b_uniques,threshold=0.99,si
             n_ab = w_ab[j]
             n_a,n_b = w_a - n_ab,w_b[j] - n_ab
             n_tot = len(unexplained_wells)
-            #score[i,j],frequency[i,j] = match_score(n_ab,n_a,n_b,n_tot, 1./np.sqrt(img_ab.shape[0]*img_ab.shape[1]))
-            score[i,j],frequency[i,j] = match_score(n_ab,n_a,n_b,n_tot, 0.5) # effectively take out prior
+            score[i,j],frequency[i,j] = match_score(n_ab,n_a,n_b,n_tot, 1./np.sqrt(img_ab.shape[0]*img_ab.shape[1]))
+            #score[i,j],frequency[i,j] = match_score(n_ab,n_a,n_b,n_tot, 0.5) # effectively take out prior
 
             if score[i,j] > threshold:
               predicted_ab.append((a_uniques[i],b_uniques[j]))
@@ -205,21 +205,13 @@ def reduce_graph(all_edges,all_freqs,all_scores,all_uniques):
 
     # TODO: add aa/bb solver ( this is non-trivial math )
     #a_clones,b_uniques = [(i) for i in all_uniques[0]],[(i) for i in all_uniques[1]]
-    
-    ab_edges = all_edges[0]
-    ab_edges_rev = [(a[1],a[0]) for a in all_edges[1]] # create symmetrical order
-    
-    predicted_ab_matches = list(set(ab_edges).intersection(ab_edges_rev))
 
-    for i,ab in enumerate(predicted_ab_matches):
-        edges.append(ab)
-        freqs.append(np.mean((all_freqs[0][ab_edges.index(ab)],all_freqs[1][ab_edges_rev.index(ab)])))
-        scores.append(all_scores[0][ab_edges.index(ab)]*all_scores[1][ab_edges_rev.index(ab)])
-        
     results = dict()
-    results['cells'] = edges
-    results['cell_frequencies'] = freqs
-    results['cell_frequencies_CI'] = [(f-s,f+s) for f,s in zip(freqs,scores)]
+    # results['cells'] = [e[0] for edge in all_edges for e in edge] # eventually, when we start doing multiclones
+    results['cells'] = [((e[0],),(e[1],)) for e in all_edges[0]]
+    results['cell_frequencies'] = [f for freq in all_freqs for f in freq]
+    results['threshold'] = [s for score in all_scores for s in score]
+    results['cell_frequencies_CI'] = [(-s/2,s/2) for score in all_scores for s in score] # this is pseudo, and totally not right
 
     return results
 
@@ -281,14 +273,11 @@ def solve(data,pair_threshold = 0.99,verbose=0):
     t = pair_threshold
     t_shared = 1 - (1 - pair_threshold)**2
             
+    
     # Find each type of available edge
     ab_edges,ab_freqs,ab_scores = directional_matches(
         img_ab,img_a,img_b,a_uniques,b_uniques,threshold=t,silent=silent)
     if verbose >= 2: print 'Finished AB edges!'
-        
-    ba_edges,ba_freqs,ba_scores = directional_matches(
-        img_ba,img_b,img_a,b_uniques,a_uniques,threshold=t,silent=silent)
-    if verbose >= 2: print 'Finished BA edges!'
         
     aa_edges,aa_freqs,aa_scores = directional_matches(
         img_aa,img_a,img_a,a_uniques,a_uniques,threshold=t_shared,silent=silent)
@@ -307,9 +296,9 @@ def solve(data,pair_threshold = 0.99,verbose=0):
     potential_ab_matches = possible_matches(real_matches,img_ab,a_uniques,b_uniques)
     
     # solves for true edges
-    all_edges = [ab_edges,ba_edges,aa_edges,bb_edges]
-    all_freqs = [ab_freqs,ba_freqs,aa_freqs,bb_freqs]
-    all_scores = [ab_scores,ba_scores,aa_scores,bb_scores]
+    all_edges = [ab_edges,aa_edges,bb_edges]
+    all_freqs = [ab_freqs,aa_freqs,bb_freqs]
+    all_scores = [ab_scores,aa_scores,bb_scores]
     all_uniques = [a_uniques,b_uniques]
     
     # graph reduction
