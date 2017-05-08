@@ -79,11 +79,13 @@ def solve(seq_data, iters=100, pair_threshold = 0.9):
   # Turns pairs of associated alpha- and beta- chains into cells that may have dual alpha chains
   cells, cell_freqs, cell_freqs_CI = pairs_to_cells(seq_data, pairs) 
 
+  thresholds = [overall_pairing_counts[p]/float(iters) for p in overall_good_pairs]
 
   results = {
     'cells': cells,
     'cell_frequencies': cell_freqs,
-    'cell_frequencies_CI': cell_freqs_CI
+    'cell_frequencies_CI': cell_freqs_CI,
+    'cell_thresholds': thresholds
   }
 
   return results
