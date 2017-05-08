@@ -279,13 +279,13 @@ def solve(data,pair_threshold = 0.99,verbose=0):
         img_ab,img_a,img_b,a_uniques,b_uniques,threshold=t,silent=silent)
     if verbose >= 2: print 'Finished AB edges!'
         
-    aa_edges,aa_freqs,aa_scores = directional_matches(
-        img_aa,img_a,img_a,a_uniques,a_uniques,threshold=t_shared,silent=silent)
-    if verbose >= 2: print 'Finished AA edges!'
+    #aa_edges,aa_freqs,aa_scores = directional_matches(
+    #    img_aa,img_a,img_a,a_uniques,a_uniques,threshold=t_shared,silent=silent)
+    #if verbose >= 2: print 'Finished AA edges!'
         
-    bb_edges,bb_freqs,bb_scores = directional_matches(
-        img_bb,img_b,img_b,b_uniques,b_uniques,threshold=t_shared,silent=silent)
-    if verbose >= 2: print 'Finished BB edges!'
+    #bb_edges,bb_freqs,bb_scores = directional_matches(
+    #    img_bb,img_b,img_b,b_uniques,b_uniques,threshold=t_shared,silent=silent)
+    #if verbose >= 2: print 'Finished BB edges!'
 
         
     if verbose >= 1: print 'Finished edge detection, analyzing graph...'
