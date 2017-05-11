@@ -13,6 +13,9 @@ def extract_chains(seq_data):
 def solve(seq_data, iters=100, pair_threshold = 0.9):
   ## Computes a solution to the alpha-beta pairing problem, using the methods in Lee et al. (2017)
   def compute_well_pairings(alpha_idx, beta_idx, scores):
+
+    if len(alpha_idx)==0 or len(beta_idx)==0:  return [] # scipy hungarian implementation doesn't handle this edge case
+
     # Reformulate problem as a general assignment problem
     # Then apply Hungarian algorithm
     # Indices in the results of running Hungarian are transformed back into alpha/beta chain ids
@@ -45,9 +48,9 @@ def solve(seq_data, iters=100, pair_threshold = 0.9):
     S = [[0 for j in range(len(all_betas))] for i in range(len(all_alphas))]
     for well_idx in wells_idx:
       well_alpha_idx, well_beta_idx = well_data[well_idx]
-      increment = 1./len(well_alpha_idx) + 1./len(well_beta_idx)
       for a_idx in well_alpha_idx:
         for b_idx in well_beta_idx:
+          increment = 1./len(well_alpha_idx) + 1./len(well_beta_idx)
           S[a_idx][b_idx] += increment
 
     # Compute well pairings for any well, if it hasn't been done already
