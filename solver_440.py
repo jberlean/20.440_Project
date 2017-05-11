@@ -169,18 +169,16 @@ def directional_matches(img_ab,img_a,img_b,a_uniques,b_uniques,threshold=0.99,si
 
         if not silent: print 'Starting analysis for alpha chain {}...\n'.format(a_uniques[i])
 
-        unexplained_wells = list(xrange(w_tot))
-
         # create counts based on unexplained well data
-        w_ab = np.sum(img_ab[i,:,unexplained_wells],axis=0)
-        w_a = np.sum(img_a[i,unexplained_wells],axis=0)
-        w_b = np.sum(img_b[:,unexplained_wells],axis=1)
+        w_ab = np.sum(img_ab[i,:,:],axis=1)
+        w_a = np.sum(img_a[i,:],axis=0)
+        w_b = np.sum(img_b[:,:],axis=1)
 
         # assign scores
         for j in xrange(img_ab.shape[1]):
             n_ab = w_ab[j]
             n_a,n_b = w_a - n_ab,w_b[j] - n_ab
-            n_tot = len(unexplained_wells)
+            n_tot = w_tot
             score[i,j],frequency[i,j] = match_score(n_ab,n_a,n_b,n_tot, 1./np.sqrt(img_ab.shape[0]*img_ab.shape[1]))
             #score[i,j],frequency[i,j] = match_score(n_ab,n_a,n_b,n_tot, 0.5) # effectively take out prior
 
@@ -192,6 +190,8 @@ def directional_matches(img_ab,img_a,img_b,a_uniques,b_uniques,threshold=0.99,si
         print 'Edge detection progress... {}%\r'.format(100*(i+1)/img_ab.shape[0]),
         
     print ''
+
+    print "***", np.max([np.product(1-score[i,:]) for i in xrange(img_ab.shape[0])])
     
     return predicted_ab,predicted_frequency,predicted_score # returns edges
 
@@ -241,8 +241,7 @@ def solve(data,pair_threshold = 0.99,verbose=0):
 
     a,b = len(a_uniques),len(b_uniques)
     
-    img_ab,img_ba = np.zeros((a,b,w_tot)),np.zeros((b,a,w_tot))
-    img_aa,img_bb = np.zeros((a,a,w_tot)),np.zeros((b,b,w_tot))
+    img_ab = np.zeros((a,b,w_tot))
     img_a = np.zeros((a,w_tot))
     img_b = np.zeros((b,w_tot))
     
@@ -258,9 +257,6 @@ def solve(data,pair_threshold = 0.99,verbose=0):
         np.put(b_v,b_ind,np.ones((len(b_ind))))
         # assign values to image layers
         img_ab[:,:,w] = np.matmul(a_v,np.transpose(b_v))
-        img_ba[:,:,w] = np.matmul(b_v,np.transpose(a_v))
-        img_aa[:,:,w] = self_occurence(a_v)
-        img_bb[:,:,w] = self_occurence(b_v)
         img_a[:,w] = np.squeeze(a_v)
         img_b[:,w] = np.squeeze(b_v)
             
@@ -279,14 +275,6 @@ def solve(data,pair_threshold = 0.99,verbose=0):
         img_ab,img_a,img_b,a_uniques,b_uniques,threshold=t,silent=silent)
     if verbose >= 2: print 'Finished AB edges!'
         
-    #aa_edges,aa_freqs,aa_scores = directional_matches(
-    #    img_aa,img_a,img_a,a_uniques,a_uniques,threshold=t_shared,silent=silent)
-    #if verbose >= 2: print 'Finished AA edges!'
-        
-    #bb_edges,bb_freqs,bb_scores = directional_matches(
-    #    img_bb,img_b,img_b,b_uniques,b_uniques,threshold=t_shared,silent=silent)
-    #if verbose >= 2: print 'Finished BB edges!'
-
         
     if verbose >= 1: print 'Finished edge detection, analyzing graph...'
         
@@ -296,9 +284,9 @@ def solve(data,pair_threshold = 0.99,verbose=0):
     potential_ab_matches = possible_matches(real_matches,img_ab,a_uniques,b_uniques)
     
     # solves for true edges
-    all_edges = [ab_edges,aa_edges,bb_edges]
-    all_freqs = [ab_freqs,aa_freqs,bb_freqs]
-    all_scores = [ab_scores,aa_scores,bb_scores]
+    all_edges = [ab_edges]
+    all_freqs = [ab_freqs]
+    all_scores = [ab_scores]
     all_uniques = [a_uniques,b_uniques]
     
     # graph reduction
