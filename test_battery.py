@@ -1,5 +1,8 @@
 import sys
 import itertools as it
+import time
+
+import random
 
 import numpy as np
 
@@ -8,7 +11,7 @@ from solver_440 import solve as solve_440
 from seq_data import SequencingData as SD
 from seq_generator import SequencingGenerator as SG
 
-def run_tests(tests):
+def run_tests(tests, path):
   ## tests is a list describing a set of runs to perform
   ## Each element of tests is of the following form:
   ##  (<num_reps>,
@@ -19,9 +22,17 @@ def run_tests(tests):
   ##    ...)
   ##  )
   results = []
-  for num_reps, seq_gen_func, seq_gen_args, solver_list in tests:
+  for testnum, (testname, num_reps, seq_gen_func, seq_gen_args, solver_list) in enumerate(tests):
     test_results = []
+    print "*******"
+    print "*******"
+    print "STARTING TEST {} ({}/{})".format(testname, testnum, len(tests))
+    print "*******"
     for i in range(num_reps):
+      print "*******"
+      print "TEST #{}, REP #{}".format(testnum, i)
+      tstart = time.time()
+
       data = seq_gen_func(**seq_gen_args)
       rep_results = []
       for solver, args, stats_func in solver_list:
@@ -29,14 +40,20 @@ def run_tests(tests):
         stats = stats_func(data, res)
         rep_results.append(stats)
       test_results.append(rep_results)
-    results.append(test_results)
 
+      print "TEST #{}, REP #{} COMPLETED IN {} SECONDS".format(testnum, i, time.time()-tstart)
+      print "*******"
+    results.append(test_results)
+    
+    save_test_results(test_results, "{}_{}".format(testname, path))
+  
   return results
 
 def save_test_results(results, path):
   import json
   f = open(path, 'w')
   json.dump(results, f)
+  f.close()
       
 
 def run_Lee(data, **solver_kwargs):
@@ -62,10 +79,7 @@ def stats_Lee(data, results):
     return top, tail
 
   def clones_to_pairings(clones):
-    pairings = set()
-    for alist,blist in clones:
-      pairings |= set(it.product(alist,blist))
-    return pairings
+    return set([p for alist,blist in clones for p in it.combinations([((a,),()) for a in alist]+[((),(b,)) for b in blist], 2)])
     
 
   true_clones = data.metadata['cells']
@@ -82,7 +96,7 @@ def stats_Lee(data, results):
   obs_alphas, obs_betas = set(sum(obs_alphas, [])), set(sum(obs_betas, []))
 
   clones = results['cells']
-  dual_clones = [c for c in clones if len(c[0])>1]
+  dual_clones = [c for c in clones if len(c[0])>1 or len(c[1])>1]
   pairings = clones_to_pairings(clones)
 
   correct_clones = [c for c in clones if c in true_clones]
@@ -185,15 +199,15 @@ def stats_Lee(data, results):
 
   return stats
 def stats_440(data, results):
-  results['cells'] = [((a,),(b,)) for a,b in results['cells']]
+  #results['cells'] = [((a,),(b,)) for a,b in results['cells']]
   return stats_Lee(data, results)
 
 
 
 def generate_sequencing_data(num_cells, **seq_gen_args):
   gen = SG(**seq_gen_args)
-  #gen.cells = SG.generate_cells(num_cells, alpha_dual_prob=0.3, beta_dual_prob=0.06)
-  gen.cells = SG.generate_cells(num_cells, alpha_dual_prob=0.0, beta_dual_prob=0.00)
+  gen.cells = SG.generate_cells(num_cells, alpha_dual_prob=0.3, beta_dual_prob=0.06)
+  #gen.cells = SG.generate_cells(num_cells, alpha_dual_prob=0.0, beta_dual_prob=0.00)
   #gen.set_cell_frequency_distribution(distro_type='explicit', frequencies=generate_cell_freqs(len(gen.cells),50))
 
   print "Generated data with the following parameters:"
@@ -219,24 +233,27 @@ def generate_sequencing_data(num_cells, **seq_gen_args):
   
 
 tests = [
-  (10, 
+  ("W={},CPW={}".format(w, cpw),
+   5, 
    generate_sequencing_data,
-   {'num_cells': 2100,
-    'chain_deletion_prob': 0.15,
-    'num_wells': 96*5,
+   {'num_cells': 1000,
+    'chain_deletion_prob': 0.0,
+    'num_wells': w,
     'cells_per_well_distribution': 'constant',
-    'cells_per_well_distribution_params': {'cells_per_well': 50},
-    'cell_frequency_distribution': 'Lee',
-    'cell_frequency_distribution_params': {'n_s': 50}
+    'cells_per_well_distribution_params': {'cells_per_well': cpw},
+    'cell_frequency_distribution': 'power-law',
+    'cell_frequency_distribution_params': {'alpha': -1}
    },
-   ((run_Lee, {'pair_threshold': 0.3, 'iters':50}, stats_Lee),)
+#   ((run_Lee, {'pair_threshold': 0.3, 'iters':25}, stats_Lee),
 #    (run_Lee, {'pair_threshold': 0.6}, stats_Lee),
 #    (run_Lee, {'pair_threshold': 0.3}, stats_Lee),
-#    (run_440, {'pair_threshold': 0.90}, stats_440))
-  )
+    ((run_440, {'pair_threshold': 0.99}, stats_440),)
+  ) for w,cpw in  zip([500],[100]*5)+zip([500]*5,[5,10,20,50,100])#,1000,2000]#[5,10,50,100,300,500,1000,2000]
 ]
         
-results = run_tests(tests)
-#data=tests[0][1](**tests[0][2])
-#res=tests[0][3][0][0](data, **tests[0][3][0][1])
-#tests[0][3][0][2](data, res)
+
+#results = run_tests(tests, "TESTRESULTS_{}.txt".format(random.randint(100,999)))
+#data=tests[0][2](**tests[0][3])
+data = SD(path='test_dual2.txt')
+res=tests[0][4][0][0](data, **tests[0][4][0][1])
+tests[0][4][0][2](data, res)
