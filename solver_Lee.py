@@ -197,18 +197,14 @@ def pairs_to_cells(seq_data, pairs):
       ]
       null_P_a1a2 = [
         sum([
-          np.exp(log_fact(n) - log_fact(n_1) - log_fact(n_2) - log_fact(n-n_1-n_2) + n_1*np.log(f_q) + n_2*np.log(f_r) + (n-n_1-n_2)*np.log(1-f_q-f_r) + n_1*np.log(error_rate) + np.log(1-error_rate**n_1) + n_2*np.log(error_rate) + np.log(1-error_rate**n_2))
+          np.exp(log_fact(n) - log_fact(n_1) - log_fact(n_2) - log_fact(n-n_1-n_2)) * f_q**n_1 * f_r**n_2 * (1-f_q-f_r)**(n-n_1-n_2) * error_rate**(n_1+n_2) * (1-error_rate**n_1) * (1-error_rate**n_2)
           for n_1 in range(1,n) for n_2 in range(1, n-n_1+1)
         ])
         for n in N if n<well_size_cutoff
       ]
       null_P_a1a2b = [
         sum([
-          np.exp(log_fact(n) - log_fact(n_1) - log_fact(n_2) - log_fact(n-n_1-n_2)) * f_q**n_1 * f_r**n_2 * (1-f_q-f_r)**(n-n_1-n_2) * (
-            error_rate**n_1*(1-error_rate**n_1)*(1-error_rate**n_2)**2 +
-            (1-error_rate**n_1)**2*(1-error_rate**n_2)**2 +
-            (1-error_rate**n_1)**2*error_rate**n_2*(1-error_rate**n_2)
-          )
+          np.exp(log_fact(n) - log_fact(n_1) - log_fact(n_2) - log_fact(n-n_1-n_2)) * f_q**n_1 * f_r**n_2 * (1-f_q-f_r)**(n-n_1-n_2) * (1-error_rate**n_1) * (1-error_rate**n_2) * (1-error_rate**(n_1+n_2))
           for n_1 in range(1,n) for n_2 in range(1, n-n_1+1)
         ])
         for n in N if n<well_size_cutoff
