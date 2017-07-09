@@ -5,11 +5,66 @@ import time
 import random
 
 import numpy as np
+import scipy.stats as scipy_stats
 
 from solver_Lee import solve as solve_Lee
 from solver_440 import solve as solve_440
 from seq_data import SequencingData as SD
 from seq_generator import SequencingGenerator as SG
+
+def roc(thresholds, correct, x_inc=None, y_inc=None):
+  if x_inc is None: 1./(len(correct)-sum(correct))
+  if y_inc is None: 1./sum(correct)
+
+  thresholds = [th+np.random.normal(0, 1e-10) for th in thresholds]
+  zipped = sorted(zip(thresholds, correct), reverse=True)
+
+  x,y = [0],[0]
+  for th, c in zipped:
+    if c:
+      x.append(x[-1])
+      y.append(y[-1]+y_inc)
+    else:
+      x.append(x[-1]+x_inc)
+      y.append(y[-1])
+
+  x.append(1)
+  y.append(1)
+  auroc = sum([(x[i+1]-x[i])*(y[i]+y[i+1])/2. for i in range(len(x)-1)])
+
+  return x,y,auroc
+
+def coverage_vs_freq(data_list, res_list, num_bins = None, bins = None):
+  freq_list = []
+  coverage_list = []
+
+  for data, res in zip(data_list, res_list):
+    res_cells_set = set(res['cells'])
+    freq_list.extend(data.metadata['generated_data']['cell_frequencies'])
+    coverage_list.extend([c in res_cells_set for c in data.metadata['cells']])
+  freq_list, coverage_list = zip(*sorted(zip(freq_list, coverage_list)))
+
+  if num_bins is None:
+    num_bins = 20
+  if bins is None:
+    log_min_freq, log_max_freq = np.log(freq_list[0]), np.log(freq_list[-1])
+    bins = list(np.exp(np.arange(log_min_freq, log_max_freq, (log_max_freq-log_min_freq)/num_bins)[:(num_bins+1)]))
+  bins.append(float('inf'))
+  num_bins = len(bins)-1
+
+  bin_counts, bin_successes = [0]*num_bins, [0]*num_bins
+  bin_idx = 0
+  for freq, covered in zip(freq_list, coverage_list):
+    while freq >= bins[bin_idx+1]:
+      bin_idx += 1 
+
+    bin_counts[bin_idx] += 1
+    if covered: bin_successes[bin_idx] += 1
+
+  bin_mean = [float(succ)/(tot) if tot>0 else float('nan') for succ,tot in zip(bin_successes, bin_counts)]
+  
+  return bin_counts, bin_successes, bins[:-1]+[max(freq_list)]
+      
 
 def run_tests(tests, path):
   ## tests is a list describing a set of runs to perform
@@ -103,7 +158,7 @@ def stats_Lee(data, results):
   correct_top_clones = [c for c in clones if c in true_top_clones]
   correct_tail_clones = [c for c in clones if c in true_tail_clones]
 
-  candidate_dual_clones = [c for c in dual_clones if all([p in pairings for p in it.product(*c)]) and c in true_dual_clones]
+  candidate_dual_clones = [c for c in dual_clones if all([p in pairings for p in clones_to_pairings([c])]) and c in true_dual_clones]
   candidate_top_dual_clones = [c for c in candidate_dual_clones if c in true_top_dual_clones]
   candidate_tail_dual_clones = [c for c in candidate_dual_clones if c in true_tail_dual_clones]
   correct_dual_clones = [c for c in dual_clones if c in true_dual_clones]
@@ -206,8 +261,8 @@ def stats_440(data, results):
 
 def generate_sequencing_data(num_cells, **seq_gen_args):
   gen = SG(**seq_gen_args)
-  gen.cells = SG.generate_cells(num_cells, alpha_dual_prob=0.3, beta_dual_prob=0.06)
-  #gen.cells = SG.generate_cells(num_cells, alpha_dual_prob=0.0, beta_dual_prob=0.00)
+  #gen.cells = SG.generate_cells(num_cells, alpha_dual_prob=0.3, beta_dual_prob=0.06)
+  gen.cells = SG.generate_cells(num_cells, alpha_dual_prob=0.0, beta_dual_prob=0.00)
   #gen.set_cell_frequency_distribution(distro_type='explicit', frequencies=generate_cell_freqs(len(gen.cells),50))
 
   print "Generated data with the following parameters:"
@@ -236,8 +291,8 @@ tests = [
   ("W={},CPW={}".format(w, cpw),
    5, 
    generate_sequencing_data,
-   {'num_cells': 1000,
-    'chain_deletion_prob': 0.0,
+   {'num_cells': 3000,
+    'chain_deletion_prob': 0.15,
     'num_wells': w,
     'cells_per_well_distribution': 'constant',
     'cells_per_well_distribution_params': {'cells_per_well': cpw},
@@ -247,13 +302,39 @@ tests = [
 #   ((run_Lee, {'pair_threshold': 0.3, 'iters':25}, stats_Lee),
 #    (run_Lee, {'pair_threshold': 0.6}, stats_Lee),
 #    (run_Lee, {'pair_threshold': 0.3}, stats_Lee),
-    ((run_440, {'pair_threshold': 0.99}, stats_440),)
-  ) for w,cpw in  zip([500],[100]*5)+zip([500]*5,[5,10,20,50,100])#,1000,2000]#[5,10,50,100,300,500,1000,2000]
+    ((run_440, {'pair_threshold': 0.75}, stats_440),)
+  ) for w,cpw in  zip([96],[100]*5)+zip([500]*5,[5,10,20,50,100])#,1000,2000]#[5,10,50,100,300,500,1000,2000]
 ]
         
 
+tstart = time.time()
 #results = run_tests(tests, "TESTRESULTS_{}.txt".format(random.randint(100,999)))
-#data=tests[0][2](**tests[0][3])
-data = SD(path='test_dual2.txt')
+data=tests[0][2](**tests[0][3])
+#data = SD(path='test_dual2.txt')
 res=tests[0][4][0][0](data, **tests[0][4][0][1])
 tests[0][4][0][2](data, res)
+print "*** Finished in {} seconds".format(time.time() - tstart)
+
+obs_alphas = set([a for alist,_ in data.well_data for a in alist])
+obs_betas = set([b for _,blist in data.well_data for b in blist])
+num_correct = len(filter(lambda c: all([a in obs_alphas for a in c[0]]) and all([b in obs_betas for b in c[1]]), data.metadata['cells']))
+num_incorrect = len(obs_alphas)*len(obs_betas)-num_correct
+
+res2 = run_Lee(data,**tests[0][4][0][1])
+tests[0][4][0][2](data,res2)
+
+import matplotlib.pyplot as plt
+plt.ion()
+
+def compute_plot_coverage_vs_freq(data, res):
+  bin_counts, bin_successes, bins = coverage_vs_freq([data],[res])
+  bin_means = [float(s)/c if c>0 else float('nan') for s,c in zip(bin_successes,bin_counts)]
+  bin_width = [bins[i+1]-bins[i] for i in range(len(bins)-1)]
+  bin_left = [b+w/2. for b,w in zip(bins, bin_width)]
+  return {'left': bin_left, 'height': bin_means, 'width': bin_width, 'color': (0,0,0,0), 'linewidth': 2}
+
+plt.figure()
+plt.xscale('log')
+plt.bar(edgecolor='blue', **compute_plot_coverage_vs_freq(data, res))
+plt.bar(edgecolor='black', **compute_plot_coverage_vs_freq(data,res2))
+
