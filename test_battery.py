@@ -303,7 +303,7 @@ tests = [
 #    (run_Lee, {'pair_threshold': 0.6}, stats_Lee),
 #    (run_Lee, {'pair_threshold': 0.3}, stats_Lee),
     ((run_440, {'pair_threshold': 0.75}, stats_440),)
-  ) for w,cpw in  zip([96],[100]*5)+zip([500]*5,[5,10,20,50,100])#,1000,2000]#[5,10,50,100,300,500,1000,2000]
+  ) for w,cpw in  zip([192],[100]*5)+zip([500]*5,[5,10,20,50,100])#,1000,2000]#[5,10,50,100,300,500,1000,2000]
 ]
         
 
@@ -338,3 +338,6 @@ plt.xscale('log')
 plt.bar(edgecolor='blue', **compute_plot_coverage_vs_freq(data, res))
 plt.bar(edgecolor='black', **compute_plot_coverage_vs_freq(data,res2))
 
+plt.xlabel('Clonotype frequency')
+plt.ylabel('Probability of being identified')
+plt.legend(['MAD-HYPE', 'ALPHABETR'])

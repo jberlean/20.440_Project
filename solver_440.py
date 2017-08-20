@@ -119,7 +119,7 @@ def possible_matches(real_matches,img_ab,a_uniques,b_uniques):
 Important Functions
 '''
 
-def find_clonotypes(start_cell, img_a, img_b, threshold = 0.99, start_prior = 1.0, alpha_priors = None, beta_priors = None):
+def find_clonotypes(start_cell, img_a, img_b, threshold = 0.99, start_prior = 1.0, alpha_priors = None, beta_priors = None, results_memo = None):
   def compute_well_membership(clonotype, well_idxs = None):
     if well_idxs is None:
       chain_membership = [img_a[a] for a in clonotype[0]] + [img_b[b] for b in clonotype[1]]
@@ -147,11 +147,15 @@ def find_clonotypes(start_cell, img_a, img_b, threshold = 0.99, start_prior = 1.
   def augment_chain_set(chain_set, addition):
     return (tuple(sorted(chain_set[0]+addition[0])), tuple(sorted(chain_set[1]+addition[1])))
 
+  if results_memo is not None and start_cell in results_memo:
+    #print "  memoized results used for {}".format(start_cell)
+    return results_memo[start_cell]
+
   num_alphas = img_a.shape[0]
   num_betas = img_b.shape[0]
 
-  if alpha_priors is None:  alpha_priors = [1./num_alphas, 0.3/num_alphas]
-  if beta_priors is None:  beta_priors = [1./num_betas, 0.06/num_betas]
+  if alpha_priors is None:  alpha_priors = [1./num_alphas]#, 0.3/num_alphas]
+  if beta_priors is None:  beta_priors = [1./num_betas]#, 0.06/num_betas]
 
   max_alphas, max_betas = len(alpha_priors), len(beta_priors)
 
@@ -159,7 +163,6 @@ def find_clonotypes(start_cell, img_a, img_b, threshold = 0.99, start_prior = 1.
 
   alist, blist = start_cell
 
-  cells_set = set() # tracks added cells so no repeats are added
   cells = []
   freqs = []
   scores = []
@@ -181,13 +184,10 @@ def find_clonotypes(start_cell, img_a, img_b, threshold = 0.99, start_prior = 1.
       score, freq = compute_score(start_cell, addition, prior, w_1 = w_1)
       score *= start_prior
 
-      #if alist[0] == 669:
-      #  print start_cell, addition, score
-
       new_cell = augment_chain_set(start_cell, addition)
-      if score > threshold and new_cell not in cells_set:
+      if score > threshold:
         ## Try to augment new cell with additional chains
-        aug_clonotypes, aug_freqs, aug_scores = find_clonotypes(new_cell, img_a, img_b, threshold, start_prior = score)
+        aug_clonotypes, aug_freqs, aug_scores = find_clonotypes(new_cell, img_a, img_b, threshold, start_prior = score, results_memo=results_memo)
 
         ## Check if there is still significant correlation within remaining cells
         unexplained_well_idxs_bool = functools.reduce(np.multiply, [1-compute_well_membership(c) for c in aug_clonotypes], np.ones(img_a.shape[1])).astype(int)
@@ -196,20 +196,20 @@ def find_clonotypes(start_cell, img_a, img_b, threshold = 0.99, start_prior = 1.
         additions = [((a,),()) for a in new_cell[0][1:]] + [((),(b,)) for b in new_cell[1]]
         for add in additions:
           score_temp, freq_temp = compute_score(running_cs, add, get_prior(running_cs, add), well_idxs=unexplained_well_idxs)
-          if len(unexplained_well_idxs) < img_a.shape[1]:
-            print running_cs, add, get_prior(running_cs, add), score_temp
-            print len(unexplained_well_idxs), compute_well_count(running_cs, well_idxs=unexplained_well_idxs), compute_well_count(add, well_idxs=unexplained_well_idxs), compute_well_count(augment_chain_set(running_cs, add), well_idxs=unexplained_well_idxs)
+          #if len(unexplained_well_idxs) < img_a.shape[1]:
+            #print running_cs, add, get_prior(running_cs, add), score_temp
+            #print len(unexplained_well_idxs), compute_well_count(running_cs, well_idxs=unexplained_well_idxs), compute_well_count(add, well_idxs=unexplained_well_idxs), compute_well_count(augment_chain_set(running_cs, add), well_idxs=unexplained_well_idxs)
           score_residual *= score_temp
           running_cs = augment_chain_set(running_cs, add)
 
-        if len(unexplained_well_idxs) < img_a.shape[1]:
-          print score, score_residual, aug_clonotypes
+        #if len(unexplained_well_idxs) < img_a.shape[1]:
+        #  print score, score_residual, aug_clonotypes
 
-        if new_cell[0][0] == 669:
-          print '******', score_residual
+        #if new_cell[0][0] == 8:
+        #  print '******', score_residual
         if score_residual > threshold:
-          if len(unexplained_well_idxs) < img_a.shape[1]:
-            print "****"
+          #if len(unexplained_well_idxs) < img_a.shape[1]:
+          #  print "****"
           aug_clonotypes.append(new_cell)
           aug_freqs.append(freq_temp)
           aug_scores.append(score_residual)
@@ -218,56 +218,13 @@ def find_clonotypes(start_cell, img_a, img_b, threshold = 0.99, start_prior = 1.
         ## Add new clonotypes to list, if they are new
         for c, f, s in zip(aug_clonotypes, aug_freqs, aug_scores):
           c = (tuple(sorted(c[0])), tuple(sorted(c[1])))
-          if c not in cells_set and len(c[0]) > 0 and len(c[1]) > 0:
-            cells_set.add(c)
+          if len(c[0]) > 0 and len(c[1]) > 0:
             cells.append(c)
             freqs.append(f)
             scores.append(s)
 
-#  if len(blist) < len(beta_priors):
-#    b_idx_start = blist[-1]+1 if len(blist)>0 else 0
-#    for b_idx in range(b_idx_start, num_betas):
-#      if b_idx in blist:  continue
-#
-#      addition = ((), (b_idx,))
-#      prior = get_prior(start_cell, addition)
-#      score, freq = compute_score(start_cell, addition, prior, w_1 = w_1)
-#
-#      if score > threshold:
-##        new_chain_set = (alist, blist+(b_idx,))
-#        new_clonotypes, new_freqs, new_scores = find_clonotypes(new_chain_set, igm_a, img_b, threshold)
-#        new_scores = [s*score for s in new_scores]
-#        
-#        filter_idx = filter(lambda i: new_scores[i]>threshold, range(len(new_scores)))
-#        new_clonotypes, new_freqs, new_scores = [new_clonotypes[i] for i in filter_idx], [new_freqs[i] for i in filter_idx], new_scores[i] for i in filter_idx]
-#
-#        unexplained_well_idxs = functools.reduce(np.multiply, [1-img_b[new_blist[-1]] for new_blist in new_clonotypes])
-#        w_ab_residual = compute_well_count(new_chain_set[0], new_chain_set[1], unexplained_well_idxs)
-#
-#        ## Check if there is still significant correlation of <new_chain_set> when all found clonotypes are removed
-#        score_residual = 1
-#        running_cs = ((new_chain_set[0][0],),())
-#        for a in new_chain_set[0][1:]:
-#          score_factor, f_ab = compute_score(running_cs, ((a,),()), img_a, img_b, get_prior(running_cs, True))
-#          score_residual *= score_factor
-#          running_cs = (running_cs[0]+(a,), running_cs[1])
-#        if score_residual > threshold:
-#          new_clonotypes.append(new_chain_set)
-#          new_freqs.append(f_ab)
-#          new_scores.append(score_residual)
-#
-#        cells.extend(new_clonotypes)
-#        freqs.append(new_freqs)
-#        scores.extend(new_scores)
-
-#        new_chain_set = ((start_cell[0]+addition[0]), (start_cell[1]+addition[1]))
-#        cells.append(new_chain_set)
-#        freqs.append(freq)
-#        scores.append(score)
-        
-  
-#  if len(filter(lambda c: len(c[0])>1 or len(c[1])>1, cells)) > 0:
-#    print filter(lambda c: len(c[0])>1 or len(c[1])>1, cells)
+  if results_memo is not None:
+    results_memo[start_cell] = (cells, freqs, scores)
 
   return cells, freqs, scores
 
@@ -309,7 +266,9 @@ Returns:
 # TODO: use sparse matrices
 # TODO: add stochasicity to well dismissal
 
-def directional_matches(img_ab,img_a,img_b,a_uniques,b_uniques,threshold=0.99,silent=False):
+def directional_matches(
+  #img_ab,
+  img_a,img_b,a_uniques,b_uniques,threshold=0.99,silent=False):
     def compute_well_count(alist, blist):
       w_ab = np.sum(functools.reduce([img_a[a] for a in alist] + [img_b[b] for b in blist], np.product))
       return w_ab
@@ -322,42 +281,24 @@ def directional_matches(img_ab,img_a,img_b,a_uniques,b_uniques,threshold=0.99,si
     predicted_frequency = []
     predicted_score = []
     
-    w_tot = img_ab.shape[2]
+    w_tot = img_a.shape[1]
 
-    for i in xrange(img_ab.shape[0]):
-
+    results_memo = {}
+    for i in xrange(img_a.shape[0]):
         if not silent: print 'Starting analysis for alpha chain {}...\n'.format(a_uniques[i])
 
-#        # create counts based on unexplained well data
-#        w_ab = np.sum(img_ab[i,:,:],axis=1)
-#        w_a = np.sum(img_a[i,:],axis=0)
-#        w_b = np.sum(img_b[:,:],axis=1)
-#
-#        # assign scores
-#        for j in xrange(img_ab.shape[1]):
-#            n_ab = w_ab[j]
-#            n_a,n_b = w_a - n_ab,w_b[j] - n_ab
-#            n_tot = w_tot
-#            score[i,j],frequency[i,j] = match_score(n_ab,n_a,n_b,n_tot, 1./np.sqrt(img_ab.shape[0]*img_ab.shape[1]))
-#            #score[i,j],frequency[i,j] = match_score(n_ab,n_a,n_b,n_tot, 0.5) # effectively take out prior
-#
-#            if score[i,j] > threshold:
-#              predicted_ab.append((a_uniques[i],b_uniques[j]))
-#              predicted_frequency.append(frequency[i,j])
-#              predicted_score.append(score[i,j])
-        cells, freqs, scores = find_clonotypes(((i,), ()), img_a, img_b, threshold)
+        cells, freqs, scores = find_clonotypes(((i,), ()), img_a, img_b, threshold, results_memo = results_memo)
         cells_adj = [(tuple(sorted([a_uniques[a] for a in alist])), tuple(sorted([b_uniques[b] for b in blist]))) for alist,blist in cells]
         predicted_ab.extend(cells_adj)
         predicted_frequency.extend(freqs)
         predicted_score.extend(scores)
 
-        print 'Edge detection progress... {}%\r'.format(100*(i+1)/img_ab.shape[0]),
+        print 'Edge detection progress... {}%\r'.format(100*(i+1)/img_a.shape[0]),
         
     print ''
 
-    print "a31 -> {}; a249 -> {}; b78 -> {}; b510 -> {}".format(a_uniques[31], a_uniques[249], b_uniques[78], b_uniques[510])
 
-    #predicted_ab, predicted_frequency, predicted_score = zip(*list(set(zip(predicted_ab, predicted_frequency, predicted_score))))
+    predicted_ab, predicted_frequency, predicted_score = zip(*list(set(zip(predicted_ab, predicted_frequency, predicted_score))))
 
     print len(predicted_ab), len(set(predicted_ab))
 
@@ -409,7 +350,7 @@ def solve(data,pair_threshold = 0.99,verbose=0):
 
     a,b = len(a_uniques),len(b_uniques)
     
-    img_ab = np.zeros((a,b,w_tot))
+    #img_ab = np.zeros((a,b,w_tot))
     img_a = np.zeros((a,w_tot))
     img_b = np.zeros((b,w_tot))
     
@@ -424,7 +365,7 @@ def solve(data,pair_threshold = 0.99,verbose=0):
         np.put(a_v,a_ind,np.ones((len(a_ind))))
         np.put(b_v,b_ind,np.ones((len(b_ind))))
         # assign values to image layers
-        img_ab[:,:,w] = np.matmul(a_v,np.transpose(b_v))
+        #img_ab[:,:,w] = np.matmul(a_v,np.transpose(b_v))
         img_a[:,w] = np.squeeze(a_v)
         img_b[:,w] = np.squeeze(b_v)
             
@@ -440,7 +381,8 @@ def solve(data,pair_threshold = 0.99,verbose=0):
     
     # Find each type of available edge
     cells,freqs,scores = directional_matches(
-        img_ab,img_a,img_b,a_uniques,b_uniques,threshold=t,silent=silent)
+        #img_ab,
+        img_a,img_b,a_uniques,b_uniques,threshold=t,silent=silent)
     if verbose >= 2: print 'Finished AB edges!'
         
         
