@@ -30,7 +30,7 @@ from datetime import datetime
 import numpy as np
 
 # personal libraries
-from methods import * # libraries: madhype,alphabetr,pairseq
+from methods import * # libraries: madhype,alphabetr,pairseq,backup_madhype
 from graphers import * # libraries: graphical_tools
 from datasim import * # libaries: seq_data,seq_generator
 
@@ -107,18 +107,18 @@ class Testing:
         # basically every parameter defined in one dictionary
         default_params = {
                          ### Solver Parameters ###
-                         'solver_methods':['madhype','alphabetr'],
+                         'solver_methods':['madhype','backup_madhype','alphabetr'],
                          ### Experimental Parameters ###
                          'well_total':96,
                          'cell_per_well_distribution':'constant', # distribution of cells in each well
-                         'cell_per_well_total':50, # number of cells per well
+                         'cell_per_well_total':500, # number of cells per well
                          ### Experimental Noise Parameters ###
                          'chain_misplacement_prob':0.00, # migration to a different well
                          'chain_deletion_prob':0.01, # disappearance of a chain in well
                          ### Repertoire Parameters ###
                          'cell_frequency_distro':'power-law', # can be constant,power-law,Lee,explicit
                          'cell_frequency_alpha':-1, # defining coefficient in the cell frequency distribution
-                         'repertoire_cell_total':[100], # number of cells simulated in repertoire
+                         'repertoire_cell_total':[40000], # number of cells simulated in repertoire
                          'alpha_chain_total':[1],
                          'beta_chain_total':[1],
                          ### Metadata Parameters
@@ -182,7 +182,12 @@ class Testing:
    
         if 'madhype' in self.solver_methods:
             startTime = datetime.now()
-            madhype_results = madhype.solve(self.data,pair_threshold=0.9,verbose=2) # not stringent
+            madhype_results = madhype.solve(self.data,pair_threshold=0.9,verbose=0) # not stringent
+            print 'MAD-HYPE took {} seconds.\n'.format(datetime.now()-startTime)
+
+        if 'backup_madhype' in self.solver_methods:
+            startTime = datetime.now()
+            backup_madhype_results = backup_madhype.solve(self.data,pair_threshold=0.9,verbose=0) # not stringent
             print 'MAD-HYPE took {} seconds.\n'.format(datetime.now()-startTime)
 
         if 'alphabetr' in self.solver_methods:
@@ -190,13 +195,21 @@ class Testing:
             alphabetr_results = alphabetr.solve(self.data,pair_threshold=0.1) # not stringent
             print 'ALPHABETR took {} seconds.\n'.format(datetime.now()-startTime)
 
-        print '\nMAD-HYPE Performance:'
-        madhype_performance = Performance(madhype_results,self.data)
-        madhype_performance()
 
-        print '\nALPHABETR Performance:'
-        alphabetr_performance = Performance(alphabetr_results,self.data)
-        alphabetr_performance()
+        if 'madhype' in self.solver_methods:
+            print '\nMAD-HYPE Performance:'
+            madhype_performance = Performance(madhype_results,self.data)
+            madhype_performance()
+
+        if 'backup_madhype' in self.solver_methods:
+            print '\nMAD-HYPE Performance:'
+            madhype_performance = Performance(backup_madhype_results,self.data)
+            madhype_performance()
+
+        if 'alphabetr' in self.solver_methods:
+            print '\nALPHABETR Performance:'
+            alphabetr_performance = Performance(alphabetr_results,self.data)
+            alphabetr_performance()
 
         self.results = [madhype_results,alphabetr_results]
 
@@ -207,6 +220,7 @@ class Testing:
             
 
 if __name__ == '__main__':
+    
     main()
 
 

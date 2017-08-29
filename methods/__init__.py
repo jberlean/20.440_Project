@@ -1,4 +1,4 @@
 
 # imports all model libraries
 
-__all__ = ['alphabetr','madhype','pairseq']
+__all__ = ['alphabetr','madhype','pairseq','backup_madhype']
