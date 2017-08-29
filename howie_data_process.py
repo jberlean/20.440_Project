@@ -97,7 +97,7 @@ def main(mode='coast2coast'):
     if mode == 'coast2coast':
         ### directory assignments
         dirnameX,dirnameY = './data/howie/subjectX','./data/howie/subjectY'
-        dirname_exp = './data/howie/experiment2' 
+        dirname_exp = './data/howie/experiment1' 
         origin_dict = []
 
         ### analysis on presented data
