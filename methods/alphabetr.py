@@ -25,8 +25,12 @@ def extract_chains(seq_data):
   return sorted(set(sum(alphas_per_well, []))), sorted(set(sum(betas_per_well, [])))
 
 def solve(seq_data, iters=100, pair_threshold = 0.9):
+
   ## Computes a solution to the alpha-beta pairing problem, using the methods in Lee et al. (2017)
   def compute_well_pairings(alpha_idx, beta_idx, scores):
+
+    if len(alpha_idx)==0 or len(beta_idx)==0:  return [] # scipy hungarian implementation doesn't handle this edge case
+
     # Reformulate problem as a general assignment problem
     # Then apply Hungarian algorithm
     # Indices in the results of running Hungarian are transformed back into alpha/beta chain ids
@@ -59,9 +63,9 @@ def solve(seq_data, iters=100, pair_threshold = 0.9):
     S = [[0 for j in range(len(all_betas))] for i in range(len(all_alphas))]
     for well_idx in wells_idx:
       well_alpha_idx, well_beta_idx = well_data[well_idx]
-      increment = 1./len(well_alpha_idx) + 1./len(well_beta_idx)
       for a_idx in well_alpha_idx:
         for b_idx in well_beta_idx:
+          increment = 1./len(well_alpha_idx) + 1./len(well_beta_idx)
           S[a_idx][b_idx] += increment
 
     # Compute well pairings for any well, if it hasn't been done already
@@ -89,17 +93,19 @@ def solve(seq_data, iters=100, pair_threshold = 0.9):
   overall_good_pairs = [pair for pair in overall_pairing_counts if overall_pairing_counts[pair]>=pair_threshold*iters]
 
   pairs = [(all_alphas[a], all_betas[b]) for a,b in overall_good_pairs]
+  thresholds = [overall_pairing_counts[p]/float(iters) for p in overall_good_pairs]
+
 
   # Turns pairs of associated alpha- and beta- chains into cells that may have dual alpha chains
   cells, cell_freqs, cell_freqs_CI = pairs_to_cells(seq_data, pairs) 
 
-  thresholds = [overall_pairing_counts[p]/float(iters) for p in overall_good_pairs]
 
   results = {
     'cells': cells,
     'cell_frequencies': cell_freqs,
     'cell_frequencies_CI': cell_freqs_CI,
-    'threshold': thresholds
+    'pairs': pairs,
+    'pair_thresholds': thresholds
   }
 
   return results
@@ -143,7 +149,7 @@ def estimate_cell_frequencies(seq_data, cells):
     L_func = lambda f: log_likelihood_func(f, N, W, k, is_dual=len(alist)>1)
 
     # Find maximal likelihood
-    f_opt = scipy.optimize.minimize_scalar(lambda f: -L_func(f), method='Bounded', bounds=(0,1)).x
+    f_opt = scipy.optimize.minimize_scalar(lambda f: -L_func(f), method='Bounded', bounds=(0,1), options={'xatol': 1e-10}).x
     L_max = L_func(f_opt)
 
     # Find confidence interval, as specified in the paper
@@ -166,7 +172,6 @@ def pairs_to_cells(seq_data, pairs):
       cells_temp = [((alist[0],), blist), ((alist[1],), blist), (alist, ()), (alist, blist)]
       #print "", cells_temp
       K = extract_cell_counts(seq_data, cells_temp, cells_per_well, N, W)
-      #print "", K
 
       # Extract individual cell counts (see Lee et al., SI, Section 5 for explanation of variables)
       K_1 = K[0]
@@ -175,59 +180,44 @@ def pairs_to_cells(seq_data, pairs):
       K_d = K[3]
       K_o = [w-k1-k2-k3-kd for w,k1,k2,k3,kd in zip(W, K_1, K_2, K_3, K_d)]
 
+      #print "", K_1, K_2, K_3, K_d, K_o
+
       # Extract relevant cell frequencies
       f_q = freqs_dict[cells_temp[0]]
       f_r = freqs_dict[cells_temp[1]]
       f_d = freqs_dict[cells_temp[3]]
 
+      #print "", f_q, f_r, f_d
+
       # Null hypothesis (no dual clone)
       log_fact = lambda x: scipy.special.gammaln(x+1)
 
-      # disgusting calculations
+      # disgusting calculations, shield your eyes from the carnage below
       null_P_a1b = [
         sum([
-          scipy.misc.comb(n, k) * f_q**k * (1-f_q-f_r)**(n-k) * (1-error_rate**k)**2
-          for k in range(1, n+1)
-        ]) +
-        sum([
-          np.exp(log_fact(n) - log_fact(n_1) - log_fact(n_2) - log_fact(n-n_1-n_2) + n_1*np.log(f_q) + n_2*np.log(f_r) + (n-n_1-n_2)*np.log(1-f_q-f_r) + 2*np.log(1-error_rate**n_1) + n_2*np.log(error_rate))
-          for n_1 in range(1, n) for n_2 in range(1, n-n_1+1)
-        ]) +
-        sum([
-          np.exp(log_fact(n) - log_fact(n_1) - log_fact(n_2) - log_fact(n-n_1-n_2) + n_1*np.log(f_q) + n_2*np.log(f_r) + (n-n_1-n_2)*np.log(1-f_q-f_r) + np.log(1-error_rate**n_1) + n_1*np.log(error_rate) + np.log(1-error_rate**n_2) + n_2*np.log(error_rate))
-          for n_1 in range(1, n) for n_2 in range(1, n-n_1+1)
+          np.exp(log_fact(n) - log_fact(n_1) - log_fact(n_2) - log_fact(n-n_1-n_2)) * f_q**n_1 * f_r**n_2 * (1-f_q-f_r)**(n-n_1-n_2) * (1-error_rate**n_1) * error_rate**n_2 * (1-error_rate**(n_1+n_2))
+          for n_1 in range(1, n+1) for n_2 in range(0, n-n_1+1)
         ])
         for n in N if n<well_size_cutoff
       ]
+      #print null_P_a1b, null_P_a1b_check, null_P_a1b_check2
       null_P_a2b = [
         sum([
-          scipy.misc.comb(n, k) * f_r**k * (1-f_q-f_r)**(n-k) * (1-error_rate**k)**2
-          for k in range(1, n+1)
-        ]) +
-        sum([
-          np.exp(log_fact(n) - log_fact(n_1) - log_fact(n_2) - log_fact(n-n_1-n_2) + n_1*np.log(f_r) + n_2*np.log(f_q) + (n-n_1-n_2)*np.log(1-f_q-f_r) + 2*np.log(1-error_rate**n_2) + n_1*np.log(error_rate))
-          for n_2 in range(1, n) for n_1 in range(1, n-n_2+1)
-        ]) +
-        sum([
-          np.exp(log_fact(n) - log_fact(n_1) - log_fact(n_2) - log_fact(n-n_1-n_2) + n_1*np.log(f_r) + n_2*np.log(f_q) + (n-n_1-n_2)*np.log(1-f_q-f_r) + np.log(1-error_rate**n_1) + n_1*np.log(error_rate) + np.log(1-error_rate**n_2) + n_2*np.log(error_rate))
-          for n_2 in range(1, n) for n_1 in range(1, n-n_2+1)
+          np.exp(log_fact(n) - log_fact(n_1) - log_fact(n_2) - log_fact(n-n_1-n_2)) * f_q**n_1 * f_r**n_2 * (1-f_q-f_r)**(n-n_1-n_2) * (1-error_rate**n_2) * error_rate**n_1 * (1-error_rate**(n_1+n_2))
+          for n_2 in range(1, n+1) for n_1 in range(0, n-n_2+1)
         ])
         for n in N if n<well_size_cutoff
       ]
       null_P_a1a2 = [
         sum([
-          np.exp(log_fact(n) - log_fact(n_1) - log_fact(n_2) - log_fact(n-n_1-n_2) + n_1*np.log(f_q) + n_2*np.log(f_r) + (n-n_1-n_2)*np.log(1-f_q-f_r) + n_1*np.log(error_rate) + np.log(1-error_rate**n_1) + n_2*np.log(error_rate) + np.log(1-error_rate**n_2))
+          np.exp(log_fact(n) - log_fact(n_1) - log_fact(n_2) - log_fact(n-n_1-n_2)) * f_q**n_1 * f_r**n_2 * (1-f_q-f_r)**(n-n_1-n_2) * error_rate**(n_1+n_2) * (1-error_rate**n_1) * (1-error_rate**n_2)
           for n_1 in range(1,n) for n_2 in range(1, n-n_1+1)
         ])
         for n in N if n<well_size_cutoff
       ]
       null_P_a1a2b = [
         sum([
-          np.exp(log_fact(n) - log_fact(n_1) - log_fact(n_2) - log_fact(n-n_1-n_2)) * f_q**n_1 * f_r**n_2 * (1-f_q-f_r)**(n-n_1-n_2) * (
-            error_rate**n_1*(1-error_rate**n_1)*(1-error_rate**n_2)**2 +
-            (1-error_rate**n_1)**2*(1-error_rate**n_2)**2 +
-            (1-error_rate**n_1)**2*error_rate**n_2*(1-error_rate**n_2)
-          )
+          np.exp(log_fact(n) - log_fact(n_1) - log_fact(n_2) - log_fact(n-n_1-n_2)) * f_q**n_1 * f_r**n_2 * (1-f_q-f_r)**(n-n_1-n_2) * (1-error_rate**n_1) * (1-error_rate**n_2) * (1-error_rate**(n_1+n_2))
           for n_1 in range(1,n) for n_2 in range(1, n-n_1+1)
         ])
         for n in N if n<well_size_cutoff
@@ -261,7 +251,12 @@ def pairs_to_cells(seq_data, pairs):
         for w,k1,k2,k3,kd,ko,p1,p2,po in zip(W, K_1, K_2, K_3, K_d, K_o, alt_P_2, alt_P_3, alt_P_other)
       ])
 
-      if alt_log_likelihood - null_log_likelihood >= 10:
+      #print null_log_likelihood, alt_log_likelihood
+
+      # Note: the requirement that null_log_likelihood be between -40 and -100 is NOT mentioned in the published text at all.
+      # However, this restriction is used in the released R source code, so it is included here for consistency with the 
+      # released R package, although its justification is unclear?
+      if alt_log_likelihood - null_log_likelihood >= 10 and -40 < null_log_likelihood < -100:
         duals.append(cells_temp[3])
 
     return duals
@@ -283,7 +278,7 @@ def pairs_to_cells(seq_data, pairs):
         w*(1 - (1-f1)**n - (1-f2)**n + (1-f1-f2)**n)
         for n,w in zip(N,W)
       ])
-      #print (alist, blist), f1, f2, sum(K_row), expected
+      #print (alist, blist), f1, f2, sum(K_row), expected, float(sum(K_row))/expected
       R.append(float(sum(K_row))/expected)
 
     # Perform clustering based on R
@@ -324,22 +319,22 @@ def pairs_to_cells(seq_data, pairs):
   freqs_dict = {c: f for c,f in zip(candidate_non_duals+candidate_duals, freqs_list)}
   freqs_CI_dict = {c: f for c,f in zip(candidate_non_duals+candidate_duals, freqs_CI_list)}
   
-#  # Find duals using likelihood method, which is computationally infeasible with wells with >50 cells
-#  likelihood_duals = find_duals_likelihood(candidate_duals, freqs_dict)
-#  #print "Likelihood duals", likelihood_duals
-#
-#  # Find duals using clustering method, which works better lower-frequency cells
-#  clustering_duals = find_duals_clustering(candidate_duals, freqs_dict)
-#  #print "Clustering duals", clustering_duals
-#
-#  # Remove non-dual counterparts for each dual cell found and add in corresponding dual cell
-#  duals = list(set(likelihood_duals + clustering_duals))
-#  for alist,blist in duals:
-#    if ((alist[0],), blist) in cells:
-#      cells.remove(((alist[0],), blist))
-#    if ((alist[1],), blist) in cells:
-#      cells.remove(((alist[1],), blist))
-#    cells.append((alist, blist))
+  # Find duals using likelihood method, which is computationally infeasible with wells with >50 cells
+  likelihood_duals = find_duals_likelihood(candidate_duals, freqs_dict)
+  #print "Likelihood duals", likelihood_duals
+
+  # Find duals using clustering method, which works better lower-frequency cells
+  clustering_duals = find_duals_clustering(candidate_duals, freqs_dict)
+  #print "Clustering duals", clustering_duals
+
+  # Remove non-dual counterparts for each dual cell found and add in corresponding dual cell
+  duals = list(set(likelihood_duals + clustering_duals))
+  for alist,blist in duals:
+    if ((alist[0],), blist) in cells:
+      cells.remove(((alist[0],), blist))
+    if ((alist[1],), blist) in cells:
+      cells.remove(((alist[1],), blist))
+    cells.append((alist, blist))
   
   cell_freqs = [freqs_dict[c] for c in cells]
   cell_freqs_CI = [freqs_CI_dict[c] for c in cells]
