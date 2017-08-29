@@ -4,6 +4,9 @@
 
 MAD-HYPE : Runtime Interface
 
+Info:
+    This creates a RuntimeInterface class to interpret data from the specifications of the GUI for MAD-HYPE
+
 Creator: Patrick V. Holec
 Created: August 10th, 2017
 Updated: August 10th, 2017

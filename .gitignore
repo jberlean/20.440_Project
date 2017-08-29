@@ -1,0 +1,7 @@
+# Why does Joseph hate .gitignore? They're wonderful
+
+# Compiled files
+*.pyc
+
+# Large data folders
+data/
