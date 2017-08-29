@@ -154,8 +154,8 @@ def find_clonotypes(start_cell, img_a, img_b, threshold = 0.99, start_prior = 1.
   num_alphas = img_a.shape[0]
   num_betas = img_b.shape[0]
 
-  if alpha_priors is None:  alpha_priors = [1./num_alphas]#, 0.3/num_alphas]
-  if beta_priors is None:  beta_priors = [1./num_betas]#, 0.06/num_betas]
+  if alpha_priors is None:  alpha_priors = [1./num_alphas, 0.3/num_alphas]
+  if beta_priors is None:  beta_priors = [1./num_betas, 0.06/num_betas]
 
   max_alphas, max_betas = len(alpha_priors), len(beta_priors)
 
