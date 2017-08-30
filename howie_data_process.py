@@ -16,7 +16,7 @@ import sys
 import gzip 
 import csv
 import cPickle as pickle
-import dbm 
+import dbm
 from collections import Counter
 
 # nonstandard libraries
@@ -63,10 +63,11 @@ def dbm_save(my_dict,fname):
     db.close()
 
 def dbm_load(fname):
-    return dbm.open('./pickles/'+fname,'c')
+    return dbm.open('./pickles/'+fname,'r')
 
 def dbm_local(fname):
-    db,my_dict = dbm.open('./pickles/'+fname,'c'),{}
+    db,my_dict = dbm.open('./pickles/'+fname,'r'),{}
+    print './pickles/'+fname
     print 'Pulling dictionary...'
     for i,k in enumerate(db.keys()):
         my_dict[k] = db[k]
@@ -103,11 +104,13 @@ def main(mode='coast2coast'):
         ### analysis on presented data
         filesX,filesY = subjectXYdata(dirnameX,dirnameY) # returns dictionaries
         catalog_repertoire(filesX,filesY,overwrite=False) 
-        data = data_assignment(dirname_exp,threshold=(5,91),overwrite=False,silent=False) # no save due to memory
+        data = data_assignment(dirname_exp,threshold=(5,91),overwrite=True,silent=False) # no save due to memory
 
+        print data.well_data
         ### run analyis (mad-hype)
         startTime = datetime.now()
-        results_madhype = madhype.solve(data,pair_threshold=0.995,verbose=7,real_data=True)
+        
+        results_madhype = madhype.solve(data,pair_threshold=0.995,verbose=0,real_data=True)
         pickle.dump(results_madhype,open('./pickles/results_{}.p'.format(dirname_exp[-1]),'wb'),protocol=pickle.HIGHEST_PROTOCOL) 
         print 'MAD-HYPE took {} seconds.\n'.format(datetime.now()-startTime)
         
@@ -140,8 +143,6 @@ def check_well_limits(dirname):
     #print howie_results[:10] 
     r = [len(h) for h in howie_results]
     print 'Dirname:'
-    print min(r)
-    print max(r)
 
 def interpret_results(data,results,dirname):
     
@@ -159,6 +160,7 @@ def interpret_results(data,results,dirname):
     all_results = results_ab  + results_aa + results_bb
 
     # map results using data dictionaries
+    raw_input()
     xH,yH = map_results(howie_results,data)
     xM,yM = map_results(all_results,data)
 
@@ -366,6 +368,8 @@ def data_assignment(dirname,threshold=(4,90),overwrite=True,silent=False):
             sequence_2_chain = {} # will hold lists of lists containing chain indices
             clone_ind = 0 
             passed_seqs = []
+            print 'OD:',origin_dict
+            raw_input() 
 
             # iterate across repertoires to make independent dictionaries
             for well_id in sorted(chain_files.keys(),key=int):
