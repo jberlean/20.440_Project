@@ -187,8 +187,7 @@ def find_all_clones(well_data, a_uniqs, b_uniqs, threshold=0.99, silent=False, d
 
         # start iterating through well sets
         for ind, well in enumerate(well_data):
-            well_chainsets = filter(lambda c:  all([((a,),()) in well for a in c[0]]) and all([((),(b,)) in well for b in c[1]]), chainsets)
-            for chainset1 in well_chainsets:
+            for chainset1 in chainsets:
                 if ind not in chainset_wells_memo[chainset1]:  continue
 
                 for chainset2 in well:
@@ -199,8 +198,11 @@ def find_all_clones(well_data, a_uniqs, b_uniqs, threshold=0.99, silent=False, d
                     # get score and frequency for parameter set
                     score,freq = score_chainset_merge(chainset1, chainset2, well_data, precalc_scores = scores, precalc_freqs = freqs)
                     score *= scores_dict[chainset1] * scores_dict[chainset2]
-                 
+
                     if score > threshold:
+                        print len(chainset_wells_memo[chainset1]), len(chainset_wells_memo[chainset2]), len(chainset_wells_memo[merged])
+                        print chainset1, chainset2, merged, score
+                        print scores_dict[chainset1], scores_dict[chainset2], score
                         added.add(merged)
                         removed.add(chainset1)
                         scores_dict[merged] = score
@@ -225,31 +227,33 @@ def find_all_clones(well_data, a_uniqs, b_uniqs, threshold=0.99, silent=False, d
         merged = (tuple(sorted(cs1[0]+cs2[0])), tuple(sorted(cs1[1]+cs2[1])))
     
         # TODO: replace with try (eafp)
-        if cs1 not in cs_wells_memo:
-            cs_wells_memo[cs1] = set([i for i in xrange(len(well_data)) if all([a in well_data[i][0] for a in cs1[0]]) and all([b in well_data[i][1] for b in cs1[1]])])
-        if cs2 not in cs_wells_memo:
-            cs_wells_memo[cs2] = set([i for i in xrange(len(well_data)) if all([a in well_data[i][0] for a in cs2[0]]) and all([b in well_data[i][1] for b in cs2[1]])])
-        if merged not in cs_wells_memo:
-            cs_wells_memo[merged] = cs_wells_memo[cs1] & cs_wells_memo[cs2]
+        if cs1 not in chainset_wells_memo:
+            chainset_wells_memo[cs1] = set([i for i in xrange(len(well_data)) if all([a in well_data[i][0] for a in cs1[0]]) and all([b in well_data[i][1] for b in cs1[1]])])
+        if cs2 not in chainset_wells_memo:
+            chainset_wells_memo[cs2] = set([i for i in xrange(len(well_data)) if all([a in well_data[i][0] for a in cs2[0]]) and all([b in well_data[i][1] for b in cs2[1]])])
+        if merged not in chainset_wells_memo:
+            chainset_wells_memo[merged] = chainset_wells_memo[cs1] & chainset_wells_memo[cs2]
             
-        w_a = len(cs_wells_memo[cs1] - elim_wells)
-        w_b = len(cs_wells_memo[cs2] - elim_wells)
-        w_ab = len(cs_wells_memo[merged] - elim_wells)
+        w_a = len(chainset_wells_memo[cs1] - elim_wells)
+        w_b = len(chainset_wells_memo[cs2] - elim_wells)
+        w_ab = len(chainset_wells_memo[merged] - elim_wells)
         
         n_a = w_a - w_ab
         n_b = w_b - w_ab
         n_ab = w_ab
         n_tot = len(well_data) - len(elim_wells)
+
+        if w_ab < 4:  return 0,0
         
         if precalc_scores is not None and precalc_freqs is not None:
-            score = precalc_scores[n_a,n_b,n_ab]
-            freq = precalc_freqs[n_a,n_b,n_ab]
+            score = precalc_scores[n_ab,n_a,n_b]
+            freq = precalc_freqs[n_ab,n_a,n_b]
         else:
             score, freq = match_score(n_ab,n_a,n_b,n_tot) # calc score manually
-        
+
         return score, freq
     def merge_chainsets(cs1, cs2):
-        return (tuple(sorted(set(chainset1[0]+chainset2[0]))), tuple(sorted(set(chainset1[1]+chainset2[1]))))
+        return (tuple(sorted(set(cs1[0]+cs2[0]))), tuple(sorted(set(cs1[1]+cs2[1]))))
 
     # reformat well data
     well_data = [set([((a,),()) for a in well[0]] + [((),(b,)) for b in well[1]]) for well in well_data]
@@ -265,8 +269,8 @@ def find_all_clones(well_data, a_uniqs, b_uniqs, threshold=0.99, silent=False, d
     # initialization
     scores_dict = {c: 1 for c in [((a,),()) for a in a_uniqs] + [((),(b,)) for b in b_uniqs]}
     freqs_dict = scores_dict.copy()
-    for a in a_uniqs:  chainset_wells_memo[((a,),())] = set(filter(lambda i: a in well_data[i], xrange(w_tot)))
-    for b in b_uniqs:  chainset_wells_memo[((),(b,))] = set(filter(lambda i: b in well_data[i], xrange(w_tot)))
+    for a in a_uniqs:  chainset_wells_memo[((a,),())] = set(filter(lambda i: ((a,),()) in well_data[i], xrange(w_tot)))
+    for b in b_uniqs:  chainset_wells_memo[((),(b,))] = set(filter(lambda i: ((),(b,)) in well_data[i], xrange(w_tot)))
 
     # Do first pass (finding alpha-beta pairs)
     well_data_beta = [set(filter(lambda c: c[0]==(), well)) for well in well_data] # well_data only containing beta chains
@@ -274,13 +278,20 @@ def find_all_clones(well_data, a_uniqs, b_uniqs, threshold=0.99, silent=False, d
     #_, pass1 = augment_chainsets(init_chainsets, well_data_beta, threshold = threshold)
     init_chainsets = [((a,),()) for a in a_uniqs] + [((),(b,)) for b in b_uniqs]
     _, pass1 = augment_chainsets(init_chainsets, well_data, threshold = threshold)
+    print '***', len(pass1)
 
     # Do second pass (adding alpha- or beta-chains to the a-b pairs)
-    #pass1_removed, pass2 = augment_chainsets(init_chainsets, well_data, threshold = threshold) # TODO: implement more stringent threshold
-    pass1_removed, pass2 = set(), set()
+    pass1_removed, pass2 = augment_chainsets(pass1, well_data, threshold = threshold) # TODO: implement more stringent threshold
+    print len(pass1_removed), len(pass2)
+    for i,c in enumerate(pass2):
+        if not all([merge_chainsets(*temp) in pass1 for temp in itertools.combinations([((a,),()) for a in c[0]] + [((),(b,)) for b in c[1]], 2)]):
+            print '***',i, c
+        for temp in itertools.combinations([((a,),()) for a in c[0]] + [((),(b,)) for b in c[1]], 2):
+            if merge_chainsets(*temp) not in pass1:  print merge_chainsets(*temp)
+    #pass1_removed, pass2 = set(), set()
 
     # Do third pass (find clones with 4 chains, i.e. dual in both alpha and beta)
-    #pass2_removed, pass3 = augment_chainsets(init_chainsets, well_data, threshold = threshold) # TODO: implement more stringent threshold
+    #pass2_removed, pass3 = augment_chainsets(pass2, well_data, threshold = threshold) # TODO: implement more stringent threshold
     pass2_removed, pass3 = set(), set()
 
     # Compile preliminary list of clones to return
@@ -296,188 +307,7 @@ def find_all_clones(well_data, a_uniqs, b_uniqs, threshold=0.99, silent=False, d
     
     return clones_4chains|clones_3chains|clones_2chains, scores_dict, freqs_dict
            
-    
-
-
-def find_nondual_clones(well_data,threshold=0.99,silent=False,distinct=False, chainset_wells_memo = dict()):
-
-    # convenience values
-    w_tot = len(well_data)
-
-    # important storage variables
-    predicted_ab = set()
-    scores_dict = {}
-    freqs_dict = {}
-        
-
-    # start iterating through well sets
-    for ind, (well_alphas, well_betas) in enumerate(well_data):
-        pairs = itertools.product(well_alphas, well_betas)
-        for a,b in pairs:
-            # calculate well occurances
-            a_chainset, b_chainset = ((a,),()), ((),(b,))
-            merged = ((a,),(b,))
-            
-            # get score and frequency for parameter set
-            score,freq = score_chainset_merge(a_chainset, b_chainset, well_data, precalc_scores = scores, precalc_freqs = freqs, chainset_wells_memo = chainset_wells_memo)
-             
-            if score > threshold:
-                predicted_ab.add(merged)
-                scores_dict[merged] = score
-                freqs_dict[merged] = freq
-
-        print 'Finished {}/{}\r'.format(ind+1,w_tot), 
-        sys.stdout.flush()
-        
-    print ''
-    
-    return list(predicted_ab), scores_dict, freqs_dict
-
-def find_dual_clones(nondual_clones, scores_dict, freqs_dict, well_data,threshold=0.99,silent=False,distinct=False, chainset_wells_memo = dict()):
-
-    # convenience values
-    w_tot = len(well_data)
-
-    # important storage variables
-    predicted_ab = set(nondual_clones)
-        
-    # find a copy of precalulcated scores, build one if it doesn't exist 
-    if not os.path.exists('./pickles'): os.makedirs('./pickles')
-    if os.path.isfile('./pickles/val{}.p'.format(w_tot)): (scores,freqs) = pickle.load(open('./pickles/val{}.p'.format(w_tot),'r'))
-    else: 
-        scores,freqs = precalculate_match_scores(w_tot, match_prior=0.5)
-        pickle.dump((scores,freqs),open('./pickles/val{}.p'.format(w_tot),'w'))
-
-    # Generate list of nondual clones in each well
-    well_nonduals = [[] for _ in xrange(w_tot)]
-    for c in nondual_clones:
-        for w in chainset_wells_memo[c]:
-            well_nonduals[w].append(c)
-            
-    # start iterating through well sets
-    for ind, nonduals in enumerate(well_nonduals):
-        nondual_pairs = itertools.combinations(nonduals, 2)
-        for nondual1, nondual2 in nondual_pairs:
-            assert nondual1 != nondual2
-            
-            chainset1 = nondual1
-            # ensure a_clone and b_clone are disjoint
-            if nondual1[0] == nondual2[0]:
-                chainset2 = ((), nondual2[1])
-            elif nondual1[1] == nondual2[1]:
-                chainset2 = (nondual2[0], ())
-            else:
-                chainset2 = nondual2
-            merged = (tuple(sorted(chainset1[0]+chainset2[0])), tuple(sorted(chainset1[1]+chainset2[1])))
-            
-            # get score and frequency for parameter set
-            score,freq = score_chainset_merge(chainset1, chainset2, well_data, precalc_scores = scores, precalc_freqs = freqs, chainset_wells_memo = chainset_wells_memo)
-            score *= scores_dict[chainset1] * scores_dict.get(chainset2, 1) # adjust score using conditional probability relationship
-             
-            if score > threshold:
-                predicted_ab.add(merged)
-                if nondual1 in predicted_ab:  predicted_ab.remove(nondual1)
-                if nondual2 in predicted_ab:  predicted_ab.remove(nondual2)
-                freqs_dict[merged] = freq
-                scores_dict[merged] = score
-
-        print 'Finished {}/{}\r'.format(ind+1,w_tot), 
-        sys.stdout.flush()
-        
-    print ''
-    
-    return list(predicted_ab) # return new list of predicted clones (some nondual, some dual)
-
-def find_hidden_clones(clones, scores_dict, freqs_dict, well_data,threshold=0.99,silent=False,distinct=False, chainset_wells_memo = dict()):
-    # we assume scores_dict, freqs_dict already contain info for all entries in clones...
-
-    # convenience values
-    w_tot = len(well_data)
-
-    # important storage variables
-    predicted_ab = set(clones)
-        
-    # find a copy of precalulcated scores, build one if it doesn't exist 
-    if not os.path.exists('./pickles'): os.makedirs('./pickles')
-    if os.path.isfile('./pickles/val{}.p'.format(w_tot)): (scores,freqs) = pickle.load(open('./pickles/val{}.p'.format(w_tot),'r'))
-    else: 
-        scores,freqs = precalculate_match_scores(w_tot, match_prior=0.5)
-        pickle.dump((scores,freqs),open('./pickles/val{}.p'.format(w_tot),'w'))
-
-    # Generate dict mapping possible "hidden" clones to the clones that are hiding them
-    potential_hidden = set()
-    hidden_by = {}
-    for clone in clones:
-        hidden_a = itertools.chain.from_iterable(itertools.combinations(clone[0], i) for i in range(1,len(clone[0])+1))
-        hidden_b = itertools.chain.from_iterable(itertools.combinations(clone[1], i) for i in range(1,len(clone[1])+1))
-        hidden = set(itertools.product(hidden_a, hidden_b)) - set([clone])
-        potential_hidden |= hidden
-        for h in hidden:
-            sys.stdout.flush()
-            if h not in hidden_by:  hidden_by[h] = []
-            hidden_by[h].append(clone)
-    potential_hidden = list(potential_hidden)
-    potential_hidden.sort(key = lambda v: len(v), reverse=True) # we have to tackle these from large to small
-        
-    # start iterating through potential hidden clones
-    print len(potential_hidden)
-    for clone_ind, clone in enumerate(potential_hidden):
-        elim_wells = set(itertools.chain(*[chainset_wells_memo[c] for c in hidden_by[clone]]))
-        
-        sub_clone = ((clone[0][0],), ())
-        additions = [((a,),()) for a in clone[0][1:]] + [((),(b,)) for b in clone[1]]
-        score = 1.
-        for addition in additions:
-            add_score,freq = score_chainset_merge(sub_clone, addition, well_data, elim_wells = elim_wells, chainset_wells_memo = chainset_wells_memo)
-            sub_clone = (tuple(sorted(sub_clone[0]+addition[0])), tuple(sorted(sub_clone[1]+addition[1])))
-            score *= add_score
-            
-        if score > threshold:
-            predicted_ab.add(clone)
-            scores_dict[clone] = score
-            freqs_dict[clone] = freq
-            
-            hidden_a = itertools.chain.from_iterable(itertools.combinations(clone[0], i) for i in range(1,len(clone[0])+1))
-            hidden_b = itertools.chain.from_iterable(itertools.combinations(clone[1], i) for i in range(1,len(clone[1])+1))
-            hidden = set(itertools.product(hidden_a, hidden_b)) - set([clone])
-            for h in hidden:  hidden_by[h].append(clone)
-            
-        if clone_ind % (len(potential_hidden)/100)==0:  print 'Finished {}/{} hidden clones to check\r'.format(clone_ind+1, len(potential_hidden)), 
-        sys.stdout.flush()
-        
-    print ''
-    
-    return list(predicted_ab) # return new list of predicted clones (nondual, dual, and hidden)
-
-def score_chainset_merge(chainset1, chainset2, well_data, precalc_scores = None, precalc_freqs = None, elim_wells = set(), chainset_wells_memo = dict()):
-    merged = (tuple(sorted(chainset1[0]+chainset2[0])), tuple(sorted(chainset1[1]+chainset2[1])))
-
-    if chainset1 not in chainset_wells_memo:
-        chainset_wells_memo[chainset1] = set([i for i in xrange(len(well_data)) if all([a in well_data[i][0] for a in chainset1[0]]) and all([b in well_data[i][1] for b in chainset1[1]])])
-    if chainset2 not in chainset_wells_memo:
-        chainset_wells_memo[chainset2] = set([i for i in xrange(len(well_data)) if all([a in well_data[i][0] for a in chainset2[0]]) and all([b in well_data[i][1] for b in chainset2[1]])])
-    if merged not in chainset_wells_memo:
-        chainset_wells_memo[merged] = chainset_wells_memo[chainset1] & chainset_wells_memo[chainset2]
-        
-    w_a = len(chainset_wells_memo[chainset1] - elim_wells)
-    w_b = len(chainset_wells_memo[chainset2] - elim_wells)
-    w_ab = len(chainset_wells_memo[merged] - elim_wells)
-    
-    n_a = w_a - w_ab
-    n_b = w_b - w_ab
-    n_ab = w_ab
-    n_tot = len(well_data) - len(elim_wells)
-    
-    if precalc_scores is not None and precalc_freqs is not None:
-        score = precalc_scores[n_a,n_b,n_ab]
-        freq = precalc_freqs[n_a,n_b,n_ab]
-    else:
-        score, freq = match_score(n_ab,n_a,n_b,n_tot) # calc score manually
-    
-    return score, freq
-    
-
-
+       
 # NOTE: This is still a relevant function, but I think it makes more sense to make a new fn for compile
 # TODO: actually figure out graph solving feature
 
