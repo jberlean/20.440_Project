@@ -186,10 +186,12 @@ def find_all_clones(well_data, a_uniqs, b_uniqs, threshold=0.99, silent=False, d
         added = set()
 
         # start iterating through well sets
-        for ind, well in enumerate(well_data):
-            for chainset1 in chainsets:
-                if ind not in chainset_wells_memo[chainset1]:  continue
-
+        #for ind, well in enumerate(well_data):
+        #    for chainset1 in chainsets:
+        #        if ind not in chainset_wells_memo[chainset1]:  continue
+        for ind, chainset1 in enumerate(chainsets):
+            for well_ind in chainset_wells_memo[chainset1]:
+                well = well_data[well_ind]
                 for chainset2 in well:
                     merged = merge_chainsets(chainset1, chainset2)
                     if merged == chainset1 or merged in added:  continue
@@ -197,19 +199,19 @@ def find_all_clones(well_data, a_uniqs, b_uniqs, threshold=0.99, silent=False, d
 
                     # get score and frequency for parameter set
                     score,freq = score_chainset_merge(chainset1, chainset2, well_data, precalc_scores = scores, precalc_freqs = freqs)
-                    score *= scores_dict[chainset1] * scores_dict[chainset2]
+                    #score *= scores_dict[chainset1] * scores_dict[chainset2]
 
                     if score > threshold:
-                        print len(chainset_wells_memo[chainset1]), len(chainset_wells_memo[chainset2]), len(chainset_wells_memo[merged])
-                        print chainset1, chainset2, merged, score
-                        print scores_dict[chainset1], scores_dict[chainset2], score
+                        #print len(chainset_wells_memo[chainset1]), len(chainset_wells_memo[chainset2]), len(chainset_wells_memo[merged])
+                        #print chainset1, chainset2, merged, score
+                        #print scores_dict[chainset1], scores_dict[chainset2], score
                         added.add(merged)
                         removed.add(chainset1)
                         scores_dict[merged] = score
                         freqs_dict[merged] = freq
     
-            print 'Finished {}/{}\r'.format(ind+1,w_tot), 
-            sys.stdout.flush()
+            print 'Finished {}/{}\r'.format(ind+1,len(chainsets)), 
+            #sys.stdout.flush()
             
         print ''
         
@@ -227,17 +229,30 @@ def find_all_clones(well_data, a_uniqs, b_uniqs, threshold=0.99, silent=False, d
         merged = (tuple(sorted(cs1[0]+cs2[0])), tuple(sorted(cs1[1]+cs2[1])))
     
         # TODO: replace with try (eafp)
-        if cs1 not in chainset_wells_memo:
+#        if cs1 not in chainset_wells_memo:
+#            chainset_wells_memo[cs1] = set([i for i in xrange(len(well_data)) if all([a in well_data[i][0] for a in cs1[0]]) and all([b in well_data[i][1] for b in cs1[1]])])
+#        if cs2 not in chainset_wells_memo:
+#            chainset_wells_memo[cs2] = set([i for i in xrange(len(well_data)) if all([a in well_data[i][0] for a in cs2[0]]) and all([b in well_data[i][1] for b in cs2[1]])])
+#        if merged not in chainset_wells_memo:
+#            chainset_wells_memo[merged] = chainset_wells_memo[cs1] & chainset_wells_memo[cs2]
+#            
+        try:
+            w_a = len(chainset_wells_memo[cs1] - elim_wells)
+        except:
             chainset_wells_memo[cs1] = set([i for i in xrange(len(well_data)) if all([a in well_data[i][0] for a in cs1[0]]) and all([b in well_data[i][1] for b in cs1[1]])])
-        if cs2 not in chainset_wells_memo:
+            w_a = len(chainset_wells_memo[cs1] - elim_wells)
+        try:
+            w_b = len(chainset_wells_memo[cs2] - elim_wells)
+        except:
             chainset_wells_memo[cs2] = set([i for i in xrange(len(well_data)) if all([a in well_data[i][0] for a in cs2[0]]) and all([b in well_data[i][1] for b in cs2[1]])])
-        if merged not in chainset_wells_memo:
-            chainset_wells_memo[merged] = chainset_wells_memo[cs1] & chainset_wells_memo[cs2]
+            w_b = len(chainset_wells_memo[cs2] - elim_wells)
             
-        w_a = len(chainset_wells_memo[cs1] - elim_wells)
-        w_b = len(chainset_wells_memo[cs2] - elim_wells)
-        w_ab = len(chainset_wells_memo[merged] - elim_wells)
-        
+        try:
+            w_ab = len(chainset_wells_memo[merged] - elim_wells)
+        except:
+            chainset_wells_memo[merged] = chainset_wells_memo[cs1] & chainset_wells_memo[cs2]
+            w_ab = len(chainset_wells_memo[merged] - elim_wells)
+            
         n_a = w_a - w_ab
         n_b = w_b - w_ab
         n_ab = w_ab
@@ -274,21 +289,25 @@ def find_all_clones(well_data, a_uniqs, b_uniqs, threshold=0.99, silent=False, d
 
     # Do first pass (finding alpha-beta pairs)
     well_data_beta = [set(filter(lambda c: c[0]==(), well)) for well in well_data] # well_data only containing beta chains
-    #init_chainsets = [((a,),()) for a in a_uniqs]
-    #_, pass1 = augment_chainsets(init_chainsets, well_data_beta, threshold = threshold)
-    init_chainsets = [((a,),()) for a in a_uniqs] + [((),(b,)) for b in b_uniqs]
-    _, pass1 = augment_chainsets(init_chainsets, well_data, threshold = threshold)
+    well_data_alpha = [set(filter(lambda c: c[1]==(), well)) for well in well_data] # well_data only containing alpha chains
+    init_chainsets = [((a,),()) for a in a_uniqs]
+    _, pass1 = augment_chainsets(init_chainsets, well_data_beta, threshold = threshold)
+    _, pass1_2 = augment_chainsets(init_chainsets, well_data_alpha, threshold = threshold)
+    _, pass1_3 = augment_chainsets([((),(b,)) for b in b_uniqs], well_data_beta, threshold=threshold) 
+    pass1 |= pass1_2 | pass1_3
+    #init_chainsets = [((a,),()) for a in a_uniqs] + [((),(b,)) for b in b_uniqs]
+    #_, pass1 = augment_chainsets(init_chainsets, well_data, threshold = threshold)
     print '***', len(pass1)
 
     # Do second pass (adding alpha- or beta-chains to the a-b pairs)
-    pass1_removed, pass2 = augment_chainsets(pass1, well_data, threshold = threshold) # TODO: implement more stringent threshold
-    print len(pass1_removed), len(pass2)
-    for i,c in enumerate(pass2):
-        if not all([merge_chainsets(*temp) in pass1 for temp in itertools.combinations([((a,),()) for a in c[0]] + [((),(b,)) for b in c[1]], 2)]):
-            print '***',i, c
-        for temp in itertools.combinations([((a,),()) for a in c[0]] + [((),(b,)) for b in c[1]], 2):
-            if merge_chainsets(*temp) not in pass1:  print merge_chainsets(*temp)
-    #pass1_removed, pass2 = set(), set()
+    #pass1_removed, pass2 = augment_chainsets(pass1, well_data, threshold = threshold) # TODO: implement more stringent threshold
+    #print len(pass1_removed), len(pass2)
+    #for i,c in enumerate(pass2):
+    #    if not all([merge_chainsets(*temp) in pass1 for temp in itertools.combinations([((a,),()) for a in c[0]] + [((),(b,)) for b in c[1]], 2)]):
+    #        print '***',i, c
+    #    for temp in itertools.combinations([((a,),()) for a in c[0]] + [((),(b,)) for b in c[1]], 2):
+    #        if merge_chainsets(*temp) not in pass1:  print merge_chainsets(*temp)
+    pass1_removed, pass2 = set(), set()
 
     # Do third pass (find clones with 4 chains, i.e. dual in both alpha and beta)
     #pass2_removed, pass3 = augment_chainsets(pass2, well_data, threshold = threshold) # TODO: implement more stringent threshold
