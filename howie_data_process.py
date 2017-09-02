@@ -46,7 +46,6 @@ def compare_lists(l1,l2):
             i1 += 1
     #print 'I1/I2',i1,i2
     #print len(l1),len(l2)
-    print len(matches)
     return matches
 
 def listcommon(testlist,biglist):
@@ -67,8 +66,7 @@ def dbm_load(fname):
 
 def dbm_local(fname):
     db,my_dict = dbm.open('./pickles/'+fname,'r'),{}
-    print './pickles/'+fname
-    print 'Pulling dictionary...'
+    print 'Pulling dictionary {}...'.format(fname)
     for i,k in enumerate(db.keys()):
         my_dict[k] = db[k]
     print 'Finished!'
@@ -97,21 +95,22 @@ def main(mode='coast2coast'):
 
     if mode == 'coast2coast':
         ### directory assignments
-        dirnameX,dirnameY = './data/howie/subjectX','./data/howie/subjectY'
-        dirname_exp = './data/howie/experiment1' 
+        dirnameX = '/home/pholec/Dropbox (MIT)/MAD-HYPE/data/howie/subjectX'
+        dirnameY = '/home/pholec/Dropbox (MIT)/MAD-HYPE/data/howie/subjectY'
+        dirname_exp = '/home/pholec/Dropbox (MIT)/MAD-HYPE/data/howie/experiment1'
         origin_dict = []
 
         ### analysis on presented data
         filesX,filesY = subjectXYdata(dirnameX,dirnameY) # returns dictionaries
         catalog_repertoire(filesX,filesY,overwrite=False) 
-        data = data_assignment(dirname_exp,threshold=(5,91),overwrite=True,silent=False) # no save due to memory
+        data = data_assignment(dirname_exp,threshold=(4,92),overwrite=False,silent=False) # no save due to memory
 
-        print data.well_data
         ### run analyis (mad-hype)
         startTime = datetime.now()
         
-        results_madhype = madhype.solve(data,pair_threshold=0.995,verbose=0,real_data=True)
-        pickle.dump(results_madhype,open('./pickles/results_{}.p'.format(dirname_exp[-1]),'wb'),protocol=pickle.HIGHEST_PROTOCOL) 
+        results_madhype = madhype.solve(data,pair_threshold=0.99,verbose=0,real_data=True,all_pairs=False)
+        #results_madhype = backup_madhype.solve(data,pair_threshold=0.99,verbose=0,real_data=True,all_pairs=False)
+        pickle.dump(results_madhype,open('./pickles/results_{}.p'.format(dirname_exp[-1]),'wb'))
         print 'MAD-HYPE took {} seconds.\n'.format(datetime.now()-startTime)
         
         ### process results
@@ -151,16 +150,24 @@ def interpret_results(data,results,dirname):
         howie_results = [((a[0],a[2]),0.0,-float(a[5])) for i,a in enumerate(csv.reader(f, dialect="excel-tab")) if i != 0]
 
     # prepare madhype results
+    '''
     results_ab = [(((a[0]),(a[1])),b,c,'AB') for a,b,c in zip(
         results['AB']['edges'],results['AB']['freqs'],results['AB']['scores'])]
     results_aa = [(((a[0],a[1]),()),b,c,'AA') for a,b,c in zip(
         results['AA']['edges'],results['AA']['freqs'],results['AA']['scores'])]
     results_bb = [(((),(a[0],a[1])),a,b,c,'BB') for a,b,c in zip(
         results['BB']['edges'],results['BB']['freqs'],results['BB']['scores'])]
+    '''
+    results_ab = [(a,b,c,'AB') for a,b,c in zip(
+        results['AB']['edges'],results['AB']['freqs'],results['AB']['scores'])]
+    results_aa = [(a,b,c,'AA') for a,b,c in zip(
+        results['AA']['edges'],results['AA']['freqs'],results['AA']['scores'])]
+    results_bb = [(a,b,c,'BB') for a,b,c in zip(
+        results['BB']['edges'],results['BB']['freqs'],results['BB']['scores'])]
+
     all_results = results_ab  + results_aa + results_bb
 
     # map results using data dictionaries
-    raw_input()
     xH,yH = map_results(howie_results,data)
     xM,yM = map_results(all_results,data)
 
@@ -185,35 +192,40 @@ def map_results(results,data):
     # create reverse dictionary in case of need
     seq_chain_A = dict([(v,k) for k,v in (data.chain_seq['A']).items()])
     seq_chain_B = dict([(v,k) for k,v in (data.chain_seq['B']).items()])
+    pairs = []
 
     for edge in results:
         if type(edge[0][0]) == int:
             if len(edge) == 4:
-                x_origin = data.chain_origin[edge[3][0]][edge[0][0]]
-                y_origin = data.chain_origin[edge[3][1]][edge[0][1]]
+                pairs.append(str(edge[0][0])+edge[3][0]+' | '+str(edge[0][1])+edge[3][1]) 
+                x_origin = data.chain_origin[edge[3][0]][str(edge[0][0])]
+                y_origin = data.chain_origin[edge[3][1]][str(edge[0][1])]
             else:
-                x_origin,y_origin = data.chain_origin['A'][edge[0][0]],data.chain_origin['B'][edge[0][1]]
+                x_origin = data.chain_origin['A'][edge[0][0]]
+                y_origin = data.chain_origin['B'][edge[0][1]]
         elif type(edge[0][0]) == str:
             try:
-                #print seq_chain_A.keys()
                 x_ind,y_ind = seq_chain_A[edge[0][0]],seq_chain_B[edge[0][1]]
                 x_origin,y_origin = data.chain_origin['A'][x_ind],data.chain_origin['B'][y_ind]
             except KeyError:
                 continue
         # check if same origin patient (exclusive)
-        if x_origin == ['X'] and y_origin == ['X']:
+        if ('X' == x_origin and 'X' == y_origin):
             x['X'].append(x['X'][-1])
             y['X'].append(y['X'][-1]+1)
-        if x_origin == ['Y'] and y_origin == ['Y']:
+        elif ('Y' == x_origin and 'Y' == y_origin):
             x['Y'].append(x['Y'][-1])
             y['Y'].append(y['Y'][-1]+1)
-        elif x_origin == ['X'] and y_origin == ['Y'] or x_origin == ['Y'] and y_origin == ['X']: 
+        elif ('X' == x_origin and 'Y' == y_origin) or ('Y' == x_origin and 'X' == y_origin): 
             x['X'].append(x['X'][-1]+1)
             x['Y'].append(x['Y'][-1]+1)
             y['X'].append(y['X'][-1])
             y['Y'].append(y['Y'][-1])
-            if x['X'][-1] == 50: break
-
+        if x['X'][-1] == 50: break
+            
+    for p in pairs: print p
+    print len(pairs)
+    print len(list(set(pairs)))
     return x,y
 
 def subjectXYdata(dirnameX,dirnameY):
@@ -368,8 +380,6 @@ def data_assignment(dirname,threshold=(4,90),overwrite=True,silent=False):
             sequence_2_chain = {} # will hold lists of lists containing chain indices
             clone_ind = 0 
             passed_seqs = []
-            print 'OD:',origin_dict
-            raw_input() 
 
             # iterate across repertoires to make independent dictionaries
             for well_id in sorted(chain_files.keys(),key=int):
@@ -450,16 +460,6 @@ class Results:
         self.well_data = [[a,b] for a,b in zip(well_dict['A'],well_dict['B'])]
         self.chain_origin = chain_origin
         self.chain_seq = chain_seq
-        
-        # also, pick up some slack and make some files for c++ embedding
-        with open('well_data_a.txt','w') as f:
-            for w in well_dict['A']: f.write('{}\n'.format(str(w)[1:-1]))
-        with open('well_data_b.txt','w') as f:
-            for w in well_dict['B']: f.write('{}\n'.format(str(w)[1:-1]))
-        with open('uniques_a.txt','w') as f:
-            for w in chain_origin['A'].keys(): f.write('{}\n'.format(w))
-        with open('uniques_b.txt','w') as f:
-            for w in chain_origin['B'].keys(): f.write('{}\n'.format(w))
 
 
 # script call catch

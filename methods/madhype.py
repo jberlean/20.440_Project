@@ -30,114 +30,13 @@ import itertools
 # nonstandard libraries
 import numpy as np
 import scipy.misc
-#import matplotlib.pyplot as plt
-#from seq_generator import SequencingGenerator as SeqGen
-#from seq_data import SequencingData
 
 
-'''
-Factory Methods
-'''
-
-# N choose K (OUTDATED, slower by ~25x)
-def nCk_old(n, r):
-    r = min(r, n-r)
-    if r == 0: return 1
-    numer = reduce(op.mul, xrange(n, n-r, -1))
-    denom = reduce(op.mul, xrange(1, r+1))
-    return numer//denom
-
-# N choose K
-def nCk(n, r):
-    return scipy.misc.comb(n,r)
-    
-'''
-Frequency Estimators
-'''
-
-# non-match MLE estimator for f_a,f_b,f_ab
-def nonmatch_frequency(w_ab,w_a,w_b,w_tot):
-    return float(w_ab)/w_tot,float(w_a+w_ab)/w_tot,float(w_b+w_ab)/w_tot
-
-# MLE estimator for f_a,f_b,f_ab
-def match_frequency(w_ab,w_a,w_b,w_tot):
-    if w_tot-w_ab == 0: f_a = 0
-    else: f_a = float(w_a)/(w_tot-w_ab)
-    if w_tot-w_ab == 0: f_b = 0
-    else: f_b = float(w_b)/(w_tot-w_ab)
-    f_ab = max((0,1. - (1.-(float(w_ab)/w_tot))/(1-f_a*f_b)))
-    return f_ab,f_a,f_b
-
-'''
-Probability Calculators
-'''
-
-# prior probability
-def nonmatch_probability(w_ab,w_a,w_b,w_tot):
-    w_ab,w_a,w_b,w_tot = int(w_ab),int(w_a),int(w_b),int(w_tot)
-    f_ab,f_a,f_b = nonmatch_frequency(w_ab,w_a,w_b,w_tot)
-    prob = instance_probability(w_ab,w_a,w_b,w_tot,f_ab,f_a,f_b)
-    if prob == 0.: 
-        return float('-inf')
-    return math.log10(prob)
-
-def match_probability(w_ab,w_a,w_b,w_tot):
-    if w_ab == 0: return float('nan')
-    w_ab,w_a,w_b,w_tot = int(w_ab),int(w_a),int(w_b),int(w_tot)
-    f_ab,f_a,f_b = match_frequency(w_ab,w_a,w_b,w_tot)
-    prob_total = 0
-    for w in xrange(0,int(w_ab)+1):
-        prob_total += (nCk(w_tot,w)*(f_ab**(w))*((1-f_ab)**(w_tot-(w))))*instance_probability(w_ab-w,w_a,w_b,w_tot-w,f_ab,f_a,f_b)        
-    if prob_total == 0.: return float('-inf')
-    return math.log10(prob_total)
-
-def instance_probability(w_ab,w_a,w_b,w_tot,f_ab,f_a,f_b):
-    a = nCk(w_tot,w_a+w_ab)*(f_a**(w_a+w_ab))*((1-f_a)**(w_tot-(w_a+w_ab)))
-    b = nCk(w_a+w_ab,w_ab)*(f_b**w_ab)*((1-f_b)**(w_a+w_ab-w_ab))
-    c =  nCk(w_tot-(w_a+w_ab),w_b)*(f_b**w_b)*((1-f_b)**(w_tot-(w_a+w_b+w_ab)))
-    return a*b*c
 
 '''
 Specialty Calculators
 '''
-    
-def self_occurence(v):
-    temp = np.matmul(v,np.transpose(v))
-    np.fill_diagonal(temp,0)
-    return temp
 
-def match_score(w_ab,w_a,w_b,w_tot, match_prior = 0.5):
-    if w_ab == 0: 
-        return 0.,0.
-    else:
-        mp,nmp = match_probability(w_ab,w_a,w_b,w_tot),nonmatch_probability(w_ab,w_a,w_b,w_tot)
-        f_ab,_,_ = match_frequency(w_ab,w_a,w_b,w_tot)
-        return (10**mp * match_prior)/(10**mp * match_prior + 10**nmp * (1-match_prior)),f_ab
-
-# TODO: what do I even do?
-def possible_matches(real_matches,img_ab,a_uniques,b_uniques):
-    w_ab = np.sum(img_ab[:,:,:],axis=2)
-    real = []
-    for rm in real_matches:
-        try: 
-            i,j = a_uniques.index(rm[0]),b_uniques.index(rm[1])
-            if w_ab[i,j] > 0: real.append(rm)
-        except ValueError: # if a real match never even occurs
-            pass
-    return real
-
-def precalculate_match_scores(w_tot,match_prior = 0.5):
-    scores,freqs = np.zeros((w_tot+1,w_tot+1,w_tot+1)),np.zeros((w_tot+1,w_tot+1,w_tot+1))
-    print ''
-    for w_ab in xrange(w_tot+1):
-        for w_a in xrange(w_tot+1):
-            for w_b in xrange(w_tot+1):
-                if w_ab + w_a + w_b > w_tot: 
-                    continue
-                else:
-                    scores[w_ab][w_a][w_b],freqs[w_ab][w_a][w_b] = match_score(w_ab,w_a,w_b,w_tot,match_prior) # effectively take out prior
-        #print 'Finished {}/{}...'.format(w_ab,w_tot)
-    return scores,freqs
 
 '''
 Important Functions
@@ -183,6 +82,20 @@ def directional_matches(a_wells,b_wells,a_uniqs,b_uniqs,w_tot,threshold=0.99,sil
     predicted_ab = []
     predicted_frequency = []
     predicted_score = []
+
+    print 'Making C++ data files...'
+    print a_wells
+    
+    with open('chain_data_a.txt','w') as f:
+        for w in a_uniqs: f.write('{}'.format(str(a_wells[w]))[1:-1]+'\n')
+    with open('chain_data_b.txt','w') as f:
+        for w in b_uniqs: f.write('{}'.format(str(b_wells[w]))[1:-1]+'\n')
+    with open('uniques_a.txt','w') as f:
+        for w in a_uniqs: f.write('{}\n'.format(w))
+    with open('uniques_b.txt','w') as f:
+        for w in b_uniqs: f.write('{}\n'.format(w))
+
+    raw_input('Hold...')
         
     # create dictionaries that map each well dictionary to the reverse (well # -> chains)
     wells_a = dict([(i,set()) for i in xrange(w_tot)])
@@ -207,8 +120,11 @@ def directional_matches(a_wells,b_wells,a_uniqs,b_uniqs,w_tot,threshold=0.99,sil
     # start iterating through well sets
     tested_pairs = set()
     for w in xrange(w_tot):
-        pairs = list(itertools.product(wells_a[w],wells_b[w]))
-        for p in pairs:
+        print len(wells_a[w]),len(wells_b[w])
+        p_tot = len(wells_a[w])*len(wells_b[w])
+        pairs = itertools.product(wells_a[w],wells_b[w])
+        for ind,p in enumerate(pairs):
+            if not distinct and p[0] == p[1]: continue
             if p in tested_pairs:
                 continue
             else:
@@ -236,10 +152,11 @@ def directional_matches(a_wells,b_wells,a_uniqs,b_uniqs,w_tot,threshold=0.99,sil
 
                 tested_pairs.add(p)
 
-        print 'Finished {}/{}\r'.format(w+1,w_tot), 
+            if ind%1000000 == 0:
+                print 'Finished {}/{}'.format(ind+1,p_tot) 
         
     print ''
-    
+     
     return predicted_ab,predicted_frequency,predicted_score # returns edges
 
 
@@ -283,60 +200,47 @@ class CollectResults:
 The Meat-and-Potatoes Function
 '''
 # Verbose: on range 0 to 9
-# TODO: verbose levels
-def solve(data,pair_threshold = 0.99,verbose=0,real_data=False):
+def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=True):
     
     if verbose >= 5: silent = False
     else: silent = True
-    
-    # find uniques
+
+    w_tot = len(data.well_data)
+
+    # Find uniques
     a_uniques = list(set([a for well in data.well_data for a in well[0]]))
     b_uniques = list(set([b for well in data.well_data for b in well[1]]))
 
-    # sort in ascending order
-    sorted(a_uniques,key=int)
-    sorted(b_uniques,key=int)
-
-    # counts of each unique in wells
-    w_tot = len(data.well_data)
-
-    # create dictionaries for well presence
+    # Generate reverse dictionary
     a_wells = dict([(a_u,[]) for a_u in a_uniques])
     b_wells = dict([(b_u,[]) for b_u in b_uniques])
     
-    if verbose >= 1: print 'Starting variable creation...'
+    if verbose >= 1: print 'Starting reverse dictionary creation...'
     
     # TODO: Replace with well_dictionary method
     # creates all the necessary images of the data
     for w,well in enumerate(data.well_data):
         for a in well[0]: a_wells[a].append(w) # drop well indices in each unique chains entry
         for b in well[1]: b_wells[b].append(w) # drop well indices in each unique chains entry
-        print 'Image generation progress... {}%\r'.format(100*(w+1)/w_tot),
-
+        print 'Reverse dictionary progress... {}%\r'.format(100*(w+1)/w_tot),
     print ''
 
-    if verbose >= 1: print 'Starting edge detection...'
-            
-    # Setup threshold values (TODO: better way to distinguish ab,ba from aa,bb
-    t = pair_threshold
-    t_shared = 1 - (1 - pair_threshold)**2
-            
+    # try to reduce dependencies on data processing here
+    with open('./solver/chain_data_a.txt','w') as f:
+        for w in a_uniques: f.write('{}'.format(str(a_wells[w]))[1:-1]+'\n')
+    with open('./solver/chain_data_b.txt','w') as f:
+        for w in b_uniques: f.write('{}'.format(str(b_wells[w]))[1:-1]+'\n')
+    with open('./solver/uniques_a.txt','w') as f:
+        for w in a_uniques: f.write('{}\n'.format(w))
+    with open('./solver/uniques_b.txt','w') as f:
+        for w in b_uniques: f.write('{}\n'.format(w))
+
+    # C++ embedding  
+    arg1,arg2,arg3 = str(w_tot),str(-math.log10(1.-pair_threshold)),str(1)
+
+    os.system(os.getcwd() + '/solver/a.out {} {} {}'.format(arg1,arg2,arg3))
     
-    # Find each type of available edge
-    ab_edges,ab_freqs,ab_scores = directional_matches(
-        a_wells,b_wells,a_uniques,b_uniques,w_tot,threshold=t,silent=silent,distinct=True)
-    if verbose >= 2: print 'Finished AB edges!'
-        
-    aa_edges,aa_freqs,aa_scores = directional_matches(
-        a_wells,a_wells,a_uniques,a_uniques,w_tot,threshold=t,silent=silent,distinct=False)
-    if verbose >= 2: print 'Finished AA edges!'
-        
-    bb_edges,bb_freqs,bb_scores = directional_matches(
-        b_wells,b_wells,b_uniques,b_uniques,w_tot,threshold=t,silent=silent,distinct=False)
-    if verbose >= 2: print 'Finished BB edges!'
-        
-    if verbose >= 1: print 'Finished edge detection, analyzing graph...'
-    
+    # real data post-processing section
     if real_data:
         results_ab = {'edges':ab_edges,'freqs':ab_freqs,'scores':ab_scores}
         results_aa = {'edges':aa_edges,'freqs':aa_freqs,'scores':aa_scores}
@@ -344,22 +248,10 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False):
         results = {'AB':results_ab,'AA':results_aa,'BB':results_bb}
         return results
 
+    # non-so-real data post-processing
     elif not real_data:
+        # recalls real matches
         real_matches = data.metadata['cells']
-        # checks to see these actually occur in data
-        #potential_ab_matches = possible_matches(real_matches,img_ab,a_uniques,b_uniques)
-        
-        # solves for true edges
-        #all_edges = [ab_edges]#,aa_edges,bb_edges]
-        #all_freqs = [ab_freqs]#,aa_freqs,bb_freqs]
-        #all_scores = [ab_scores]#,aa_scores,bb_scores]
-        #all_uniques = [a_uniques,b_uniques]
-       
-        #results_ab = {'edges':ab_edges,'freqs':ab_freqs,'scores':ab_scores}
-        #results_aa = {'edges':aa_edges,'freqs':aa_freqs,'scores':aa_scores}
-        #results_bb = {'edges':bb_edges,'freqs':bb_freqs,'scores':bb_scores}
-
-        #results = {'AB':results_ab,'AA':results_aa,'BB':results_bb}
         
         # deposit results in the collect results function 
         compiler = CollectResults()
