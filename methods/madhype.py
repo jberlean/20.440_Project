@@ -26,8 +26,13 @@ import time
 import os
 import pickle
 import itertools
+import multiprocessing
+import threading
+import collections
 
 # nonstandard libraries
+import matplotlib.pyplot as plt # temporary, delete me later
+from datetime import datetime
 import numpy as np
 import scipy.misc
 
@@ -36,12 +41,97 @@ import scipy.misc
 '''
 Specialty Calculators
 '''
+def chunkIt(seq, num):
+    avg = len(seq) / float(num)
+    out = []
+    last = 0.0
+    while last < len(seq):
+        out.append(seq[int(last):int(last + avg)])
+        last += avg
+    return out
 
+# N choose K
+def nCk(n, r):
+    return scipy.misc.comb(n,r)
 
 '''
 Important Functions
 '''
 
+def madhype_thread(args):
+    startTime = datetime.now() 
+    os.system(os.getcwd() + '/solver/a.out {} {} {}'.format(*args))
+    print 'Thread-{} took {} seconds.\n'.format(args[-1],datetime.now()-startTime)
+
+
+def determine_core_usage(cores): 
+    if cores == 'max':
+        print 'Declared max CPU core usage ({})...'.format(multiprocessing.cpu_count())
+        return multiprocessing.cpu_count()
+    elif multiprocessing.cpu_count() < cores:
+        print 'Number of declared cores larger than detected, reducing usage {} -> {}'.format(
+                cores,multiprocessing.cpu_count())
+        return multiprocessing.cpu_count()
+    else:
+        return cores
+
+def multithread_madhype(cores,data,args):
+    # start a timer
+    startTime = datetime.now()
+
+    a_uniques,b_uniques,a_wells,b_wells = passed_data # unpackage data 
+
+    # try to reduce dependencies on data processing here
+    for i,a_u in enumerate(chunkIt(a_uniques,core_count)):
+        with open('./solver/chain_data_a_{}.txt'.format(i+1),'w') as f:
+            for w in a_u: f.write('{}'.format(str(a_wells[w]))[1:-1]+'\n')
+        with open('./solver/uniques_a_{}.txt'.format(i+1),'w') as f:
+            for w in a_u: f.write('{}\n'.format(w))
+    with open('./solver/chain_data_b.txt','w') as f:
+        for w in b_uniques: f.write('{}'.format(str(b_wells[w]))[1:-1]+'\n')
+    with open('./solver/uniques_b.txt','w') as f:
+        for w in b_uniques: f.write('{}\n'.format(w))
+
+    # create parameter sets for each core
+    arg_lists = [args+[str(i+1)] for i in xrange(cores)] 
+    
+    # create threads and start the engines
+    threads = []
+    for i,args in zip(xrange(cores),arg_lists):
+        t = threading.Thread(name='thread-'+str(i+1),target=madhype_thread, args=(args,))
+        threads.append(t)
+        t.start() # start task 
+
+    for t in threads:    
+        t.join() # wait until full completion 
+    # let us know how long everything took
+    print 'Multithreaded C++ full implementation took {} seconds.\n'.format(datetime.now()-startTime)
+
+
+"""
+Compiles the results from multiple core outputs, returns a dictionary of results
+"""
+def collect_results(core_count):
+    lines = []
+    # get all the results into one list
+    for i in xrange(core_count):
+        with open('results_{}.txt'.format(i+1),'r') as f:
+            lines += [l.strip().split('\t') for l in f.readlines()]
+    # save in clean form 
+    return lines
+
+def export_results(ab_lines,aa_lines,bb_lines):
+    # initialize list
+    results = []
+    # neatly packages all the data from AB,AA,BB
+    for lines in [ab_lines,aa_lines,bb_lines]:
+        edges = [(int(l[2]),int(l[3])) for l in lines]
+        freqs = [float(l[1]) for l in lines]
+        scores = [float(l[0]) for l in lines]
+        results.append({'edges':edges,'freqs':freqs,'scores':scores})
+    # return results
+    return {'AB':results[0],'AA':results[1],'BB':results[2]}
+    
 '''
 
 Name: directional_matches
@@ -200,7 +290,8 @@ class CollectResults:
 The Meat-and-Potatoes Function
 '''
 # Verbose: on range 0 to 9
-def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=True):
+# Adjustment: refers to the prior distribution adjustment account for repertoire density error
+def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,repertoire_adjustment=False,cores='max'):
     
     if verbose >= 5: silent = False
     else: silent = True
@@ -217,7 +308,6 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=True):
     
     if verbose >= 1: print 'Starting reverse dictionary creation...'
     
-    # TODO: Replace with well_dictionary method
     # creates all the necessary images of the data
     for w,well in enumerate(data.well_data):
         for a in well[0]: a_wells[a].append(w) # drop well indices in each unique chains entry
@@ -225,27 +315,51 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=True):
         print 'Reverse dictionary progress... {}%\r'.format(100*(w+1)/w_tot),
     print ''
 
-    # try to reduce dependencies on data processing here
-    with open('./solver/chain_data_a.txt','w') as f:
-        for w in a_uniques: f.write('{}'.format(str(a_wells[w]))[1:-1]+'\n')
-    with open('./solver/chain_data_b.txt','w') as f:
-        for w in b_uniques: f.write('{}'.format(str(b_wells[w]))[1:-1]+'\n')
-    with open('./solver/uniques_a.txt','w') as f:
-        for w in a_uniques: f.write('{}\n'.format(w))
-    with open('./solver/uniques_b.txt','w') as f:
-        for w in b_uniques: f.write('{}\n'.format(w))
+    # detect the appropriate amount of core usage
+    core_count = determine_core_usage(cores) # calls simple function to figure out core counts
 
     # C++ embedding  
-    arg1,arg2,arg3 = str(w_tot),str(-math.log10(1.-pair_threshold)),str(1)
-
-    os.system(os.getcwd() + '/solver/a.out {} {} {}'.format(arg1,arg2,arg3))
+    args = [str(w_tot),str(-math.log10(1.-pair_threshold))]
     
+    startTime = datetime.now()
+
+    ### MAD-HYPE multithreaded C++ implementation ###
+    # work horse (which loads everything and sets up threads)
+
+    # First, do the necessary A/B pairs:
+    passed_data = [a_uniques,b_uniques,a_wells,b_wells]
+    #multithread_madhype(core_count,passed_data,args)
+    lines_ab = collect_results(core_count)
+
+    if repertoire_adjustment:
+        # make histogram dictionaries for multiplicity adjustments
+        counter_a = collections.Counter([len(wc) for wc in a_wells.values()])
+        counter_b = collections.Counter([len(wc) for wc in b_wells.values()])
+        counter_a = dict([(k,v*math.log10((nCk(w_tot,k)-1)/nCk(w_tot,k))) for k,v in counter_a.items()]) 
+        counter_b = dict([(k,v*math.log10((nCk(w_tot,k)-1)/nCk(w_tot,k))) for k,v in counter_b.items()]) 
+        # Old set, for later investigation
+        #counter_a = dict([(k,math.log10(v)) for k,v in counter_a.items()]) 
+        #counter_b = dict([(k,math.log10(v)) for k,v in counter_b.items()]) 
+        # make adjustment
+        lines_ab = [[float(l[0]) - (counter_a[len(a_wells[int(l[2])])] + counter_b[len(b_wells[int(l[3])])])] + l[1:] for l in lines_ab]
+        
+    # Next, consider doing A/A or B/B pairs
+    if all_pairs:
+        passed_data = [a_uniques,a_uniques,a_wells,b_wells]
+        multithread_madhype(core_count,passed_data,args)
+        lines_aa = collect_results(core_count)
+
+        passed_data = [a_uniques,b_uniques,a_wells,b_wells]
+        multithread_madhype(core_count,passed_data,args)
+        lines_bb = collect_results(core_count)
+    else:
+        lines_aa = []
+        lines_bb = []
+
     # real data post-processing section
     if real_data:
-        results_ab = {'edges':ab_edges,'freqs':ab_freqs,'scores':ab_scores}
-        results_aa = {'edges':aa_edges,'freqs':aa_freqs,'scores':aa_scores}
-        results_bb = {'edges':bb_edges,'freqs':bb_freqs,'scores':bb_scores}
-        results = {'AB':results_ab,'AA':results_aa,'BB':results_bb}
+        # collect results in each core output file
+        results = export_results(lines_ab,lines_aa,lines_bb)
         return results
 
     # non-so-real data post-processing

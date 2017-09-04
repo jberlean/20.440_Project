@@ -31,6 +31,12 @@ using namespace std;
 ///      METHODS    ///
 ///////////////////////
 
+// Index a 3D matrix using specified values
+int Index(int a, int b, int c, int total){
+    int ind = a*(total+1)*(total+1) + b*(total+1) + c;
+}
+
+
 // Print method for vectors
 void Print(const vector<int>& v){
     for(unsigned i = 0; i< v.size(); ++i) {
@@ -38,6 +44,7 @@ void Print(const vector<int>& v){
     }
     cout << endl;
 }
+
 
 int intersection(int *a, int *b, int size)
 {
@@ -306,8 +313,8 @@ int main(int argc, char *argv[])
     
     // Initialize the storage variables
 
-    new float scores[w_tot+1][w_tot+1][w_tot+1] = {}; 
-    new float freqs[w_tot+1][w_tot+1][w_tot+1] = {}; 
+    float* scores = new float[(w_tot+1)*(w_tot+1)*(w_tot+1)](); 
+    float* freqs = new float[(w_tot+1)*(w_tot+1)*(w_tot+1)](); 
 
     // Fill storage variables
     for( int w_ab = 0; w_ab < w_tot+1; w_ab += 1 ){
@@ -316,8 +323,8 @@ int main(int argc, char *argv[])
                 if ( w_ab+w_a+w_b <= w_tot ) {
                     float score, freq;  // Assign empty score/freq variables
                     match_score(w_ab,w_a,w_b,w_tot,score,freq);
-                    scores[w_ab][w_a][w_b] = score;
-                    freqs[w_ab][w_a][w_b] = freq;
+                    scores[Index(w_ab,w_a,w_b,w_tot)] = score;
+                    freqs[Index(w_ab,w_a,w_b,w_tot)] = freq;
                 }
             }
         }
@@ -358,9 +365,9 @@ int main(int argc, char *argv[])
     
     
     // Declare data variables
-    string fname_data_a = "./solver/chain_data_a.txt";
+    string fname_data_a = "./solver/chain_data_a_" + to_string(index)+ ".txt";
     string fname_data_b = "./solver/chain_data_b.txt";
-    string fname_uniques_a = "./solver/uniques_a.txt";
+    string fname_uniques_a = "./solver/uniques_a_" + to_string(index) + ".txt";
     string fname_uniques_b = "./solver/uniques_b.txt";
 
     // Load unique chains for a/b
@@ -394,10 +401,8 @@ int main(int argc, char *argv[])
             int w_ab = intersection(chain_data_a[i],chain_data_b[j],w_tot);
             int w_a = chain_count_a[i] - w_ab; 
             int w_b = chain_count_b[j] - w_ab; 
-            //float score = scores[w_ab][w_a][w_b];
-            //float freq = freqs[w_ab][w_a][w_b];
-            match_score(w_ab,w_a,w_b,w_tot,score,freq);
-            
+            score = scores[Index(w_ab,w_a,w_b,w_tot)];
+            freq = freqs[Index(w_ab,w_a,w_b,w_tot)];
              
             // Save results that have a score above threshold
             if (score > threshold) 
@@ -413,7 +418,7 @@ int main(int argc, char *argv[])
     cout << endl;
 
     // Output results to txt file
-    ofstream output_file("./results.txt");
+    ofstream output_file("./results_" + to_string(index) + ".txt");
     ostream_iterator<string> output_iterator(output_file, "\n");
     copy(results.begin(), results.end(), output_iterator); 
 };
