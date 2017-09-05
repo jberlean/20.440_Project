@@ -22,6 +22,7 @@ from collections import Counter
 # nonstandard libraries
 from datetime import datetime
 import matplotlib.pyplot as plt
+import numpy as np
 
 # homegrown libraries
 from methods import * # libraries: madhype,alphabetr,pairseq
@@ -97,13 +98,13 @@ def main(mode='coast2coast'):
         ### directory assignments
         dirnameX = '/home/pholec/Dropbox (MIT)/MAD-HYPE/data/howie/subjectX'
         dirnameY = '/home/pholec/Dropbox (MIT)/MAD-HYPE/data/howie/subjectY'
-        dirname_exp = '/home/pholec/Dropbox (MIT)/MAD-HYPE/data/howie/experiment2'
+        dirname_exp = '/home/pholec/Dropbox (MIT)/MAD-HYPE/data/howie/experiment1'
         origin_dict = []
 
         ### analysis on presented data
         filesX,filesY = subjectXYdata(dirnameX,dirnameY) # returns dictionaries
         catalog_repertoire(filesX,filesY,overwrite=False) 
-        data = data_assignment(dirname_exp,threshold=(5,91),overwrite=False,silent=False) # no save due to memory
+        data = data_assignment(dirname_exp,threshold=(4,92),overwrite=False,silent=False) # no save due to memory
 
         ### run analyis (mad-hype)
         startTime = datetime.now()
@@ -173,14 +174,30 @@ def interpret_results(data,results,dirname):
     xH,yH = map_results(howie_results,data)
     xM,yM = map_results(all_results,data)
 
+    # generate figure
+    axes = plt.gca()
+    
     # plot results
     plt.plot(xH['X'],yH['X'],label='Howie (X)')
     plt.plot(xH['Y'],yH['Y'],label='Howie (Y)')
     plt.plot(xM['X'],yM['X'],label='MAD-HYPE (X)')
     plt.plot(xM['Y'],yM['Y'],label='MAD-HYPE (Y)')
     
+    # add error limit
+    xB,yB = np.arange(0,int(axes.get_ylim()[1])/200),200*np.arange(0,int(axes.get_ylim()[1])/200)
+    plt.plot(xB,yB,label='1% Error',linestyle='--',color='k')
+
+    # stylize graph
     plt.xlabel('Number of false positives')
     plt.ylabel('Number of true positives')
+
+    # print out improvement metrics
+    for xm,ym,label in [(xM['X'],yM['X'],'X'),(xM['Y'],yM['Y'],'Y'),(xH['X'],yH['X'],'X (howie)'),(xH['Y'],yH['Y'],'Y (howie)')]:
+        for i,x,y in zip(xrange(len(xm)),xm,ym):
+            if y < 200*x:
+                print 'Subject {}: {} [X = {}]'.format(label,ym[i-1],xm[i-1])
+                break
+
     plt.legend()
     plt.show(block=False)
     raw_input('Press enter to continue...')

@@ -79,10 +79,10 @@ def multithread_madhype(cores,data,args):
     # start a timer
     startTime = datetime.now()
 
-    a_uniques,b_uniques,a_wells,b_wells = passed_data # unpackage data 
+    a_uniques,b_uniques,a_wells,b_wells = data # unpackage data 
 
     # try to reduce dependencies on data processing here
-    for i,a_u in enumerate(chunkIt(a_uniques,core_count)):
+    for i,a_u in enumerate(chunkIt(a_uniques,cores)):
         with open('./solver/chain_data_a_{}.txt'.format(i+1),'w') as f:
             for w in a_u: f.write('{}'.format(str(a_wells[w]))[1:-1]+'\n')
         with open('./solver/uniques_a_{}.txt'.format(i+1),'w') as f:
@@ -328,21 +328,21 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,r
 
     # First, do the necessary A/B pairs:
     passed_data = [a_uniques,b_uniques,a_wells,b_wells]
-    #multithread_madhype(core_count,passed_data,args)
+    multithread_madhype(core_count,passed_data,args)
     lines_ab = collect_results(core_count)
 
     if repertoire_adjustment:
         # make histogram dictionaries for multiplicity adjustments
         counter_a = collections.Counter([len(wc) for wc in a_wells.values()])
         counter_b = collections.Counter([len(wc) for wc in b_wells.values()])
-        counter_a = dict([(k,v*math.log10((nCk(w_tot,k)-1)/nCk(w_tot,k))) for k,v in counter_a.items()]) 
-        counter_b = dict([(k,v*math.log10((nCk(w_tot,k)-1)/nCk(w_tot,k))) for k,v in counter_b.items()]) 
+        #counter_a = dict([(k,v*math.log10((nCk(w_tot,k)-1)/nCk(w_tot,k))) for k,v in counter_a.items()]) 
+        #counter_b = dict([(k,v*math.log10((nCk(w_tot,k)-1)/nCk(w_tot,k))) for k,v in counter_b.items()]) 
         # Old set, for later investigation
-        #counter_a = dict([(k,math.log10(v)) for k,v in counter_a.items()]) 
-        #counter_b = dict([(k,math.log10(v)) for k,v in counter_b.items()]) 
+        counter_a = dict([(k,math.log10(v)) for k,v in counter_a.items()]) 
+        counter_b = dict([(k,math.log10(v)) for k,v in counter_b.items()]) 
         # make adjustment
-        lines_ab = [[float(l[0]) - (counter_a[len(a_wells[int(l[2])])] + counter_b[len(b_wells[int(l[3])])])] + l[1:] for l in lines_ab]
-        
+        lines_ab = [[float(l[0]) - 1.0*(counter_a[len(a_wells[int(l[2])])] + counter_b[len(b_wells[int(l[3])])])] + l[1:] for l in lines_ab]
+
     # Next, consider doing A/A or B/B pairs
     if all_pairs:
         passed_data = [a_uniques,a_uniques,a_wells,b_wells]
