@@ -26,6 +26,8 @@ It is written in C++ so that execution speed can be improved 20-fold
 
 using namespace std;
 
+// This is a trivial edit
+
 ///////////////////////
 /// DATA PROCESSING ///
 ///      METHODS    ///
