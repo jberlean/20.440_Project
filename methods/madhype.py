@@ -189,13 +189,25 @@ def find_all_clones(well_data, a_uniqs, b_uniqs, threshold=0.99, silent=False, d
         #for ind, well in enumerate(well_data):
         #    for chainset1 in chainsets:
         #        if ind not in chainset_wells_memo[chainset1]:  continue
+        tstart = time.time()
+        pairs_to_check = {c: set() for c in chainsets}
+        for (well_ind, well),c in itertools.product(enumerate(well_data), chainsets):
+                if well_ind in chainset_wells_memo[c]:
+                    pairs_to_check[c] |= well
+        t1 = time.time() - tstart
+        #def abc(p):
+        #    if p[0][0] in chainset_wells_memo[p[1]]:  pairs_to_check[p[1]] |= p[0][1]
+        #map(abc, itertools.product(enumerate(well_data), chainsets))
+
+        
+        tstart = time.time()
         for ind, chainset1 in enumerate(chainsets):
-            for well_ind in chainset_wells_memo[chainset1]:
-                well = well_data[well_ind]
-                for chainset2 in well:
-                    merged = merge_chainsets(chainset1, chainset2)
-                    if merged == chainset1 or merged in added:  continue
-                    assert len(chainset1[0]+chainset1[1])+len(chainset2[0]+chainset2[1]) == len(merged[0]+merged[1])
+#            for well_ind in chainset_wells_memo[chainset1]:
+#                well = well_data[well_ind]
+                for chainset2 in pairs_to_check[chainset1]:
+                    merged = (tuple(sorted(chainset1[0]+chainset2[0])), tuple(sorted(chainset1[1]+chainset2[1])))#merge_chainsets(chainset1, chainset2)
+                    #if merged == chainset1 or merged in added:  continue
+                    #assert len(chainset1[0]+chainset1[1])+len(chainset2[0]+chainset2[1]) == len(merged[0]+merged[1])
 
                     # get score and frequency for parameter set
                     score,freq = score_chainset_merge(chainset1, chainset2, well_data, precalc_scores = scores, precalc_freqs = freqs)
@@ -210,10 +222,13 @@ def find_all_clones(well_data, a_uniqs, b_uniqs, threshold=0.99, silent=False, d
                         scores_dict[merged] = score
                         freqs_dict[merged] = freq
     
-            print 'Finished {}/{}\r'.format(ind+1,len(chainsets)), 
+                #print 'Finished {}/{}\r'.format(ind+1,len(chainsets)), 
             #sys.stdout.flush()
-            
+        t2 = time.time() - tstart            
+
+
         print ''
+        print "{}% spent in prelims, {}% spent in work".format(t1/(t1+t2)*100,100*t2/(t1+t2))
         
         return removed, added
     def find_hidden_chainsets(potential_hidden, potential_hiders, well_data, threshold):
