@@ -104,12 +104,12 @@ def main(mode='coast2coast'):
         ### analysis on presented data
         filesX,filesY = subjectXYdata(dirnameX,dirnameY) # returns dictionaries
         catalog_repertoire(filesX,filesY,overwrite=False) 
-        data = data_assignment(dirname_exp,threshold=(4,92),overwrite=False,silent=False) # no save due to memory
+        data = data_assignment(dirname_exp,threshold=(5,92),overwrite=False,silent=False) # no save due to memory
 
         ### run analyis (mad-hype)
         startTime = datetime.now()
         
-        results_madhype = madhype.solve(data,pair_threshold=0.9999,verbose=0,real_data=True,all_pairs=False,repertoire_adjustment=True,cores=8)
+        results_madhype = madhype.solve(data,pair_threshold=0.9999,verbose=0,real_data=True,all_pairs=False,repertoire_adjustment=False,cores=8)
         pickle.dump(results_madhype,open('./pickles/results_{}.p'.format(dirname_exp[-1]),'wb'))
         print 'MAD-HYPE took {} seconds.\n'.format(datetime.now()-startTime)
         
@@ -184,8 +184,10 @@ def interpret_results(data,results,dirname):
     plt.plot(xM['Y'],yM['Y'],label='MAD-HYPE (Y)')
     
     # add error limit
-    xB,yB = np.arange(0,int(axes.get_ylim()[1])/200),200*np.arange(0,int(axes.get_ylim()[1])/200)
+    xB,yB = np.arange(0,1+int(axes.get_ylim()[1])/200),200*np.arange(0,1+int(axes.get_ylim()[1])/200)
     plt.plot(xB,yB,label='1% Error',linestyle='--',color='k')
+    axes.set_xlim([0,600])
+    axes.set_ylim([0,75000])
 
     # stylize graph
     plt.xlabel('Number of false positives')
@@ -240,7 +242,7 @@ def map_results(results,data):
             x['Y'].append(x['Y'][-1]+1)
             y['X'].append(y['X'][-1])
             y['Y'].append(y['Y'][-1])
-        if x['X'][-1] == 1000: break
+        if x['X'][-1] == 600: break
             
     print 'Example pairs:'
     for p in pairs[:20]: print p

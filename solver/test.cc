@@ -34,6 +34,7 @@ using namespace std;
 // Index a 3D matrix using specified values
 int Index(int a, int b, int c, int total){
     int ind = a*(total+1)*(total+1) + b*(total+1) + c;
+    return ind;
 }
 
 

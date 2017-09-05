@@ -335,13 +335,23 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,r
         # make histogram dictionaries for multiplicity adjustments
         counter_a = collections.Counter([len(wc) for wc in a_wells.values()])
         counter_b = collections.Counter([len(wc) for wc in b_wells.values()])
-        #counter_a = dict([(k,v*math.log10((nCk(w_tot,k)-1)/nCk(w_tot,k))) for k,v in counter_a.items()]) 
-        #counter_b = dict([(k,v*math.log10((nCk(w_tot,k)-1)/nCk(w_tot,k))) for k,v in counter_b.items()]) 
+        #counter_a = dict([(k,v*math.log10((nCk(w_tot,k)-1)/nCk(w_tot,k))) for k,v in counter_a.items()])
+        #counter_b = dict([(k,v*math.log10((nCk(w_tot,k)-1)/nCk(w_tot,k))) for k,v in counter_b.items()])
         # Old set, for later investigation
-        counter_a = dict([(k,math.log10(v)) for k,v in counter_a.items()]) 
-        counter_b = dict([(k,math.log10(v)) for k,v in counter_b.items()]) 
+        counter_a_old = dict([(k,math.log10(v)) for k,v in counter_a.items()]) 
+        counter_b_old = dict([(k,math.log10(v)) for k,v in counter_b.items()]) 
+        counter_a = dict([(k,math.log10(1./(v*(1./nCk(w_tot,k)) + (1.-(1./nCk(w_tot,k))))))
+            for k,v in counter_a.items()]) 
+        counter_b = dict([(k,math.log10(1./(v*(1./nCk(w_tot,k)) + (1.-(1./nCk(w_tot,k)))))) 
+            for k,v in counter_b.items()]) 
+
+        for k in counter_a.keys():
+            print '{}: {} vs. {}'.format(k,counter_a[k],10.**counter_a_old[k])
+
+        
+
         # make adjustment
-        lines_ab = [[float(l[0]) - 1.0*(counter_a[len(a_wells[int(l[2])])] + counter_b[len(b_wells[int(l[3])])])] + l[1:] for l in lines_ab]
+        lines_ab = [[float(l[0]) + 1.0*(counter_a[len(a_wells[int(l[2])])] + counter_b[len(b_wells[int(l[3])])])] + l[1:] for l in lines_ab]
 
     # Next, consider doing A/A or B/B pairs
     if all_pairs:
