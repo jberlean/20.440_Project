@@ -187,6 +187,19 @@ double nCk(int n, int k)
     return res;
 }
 
+double multinomial_prob4(int n1, int n2, int n3, int n4, float p1, float p2, float p3, float p4) {
+    //double val = nCk(n1+n2, n2) * nCk(n1+n2+n3, n3) * nCk(n1+n2+n3+n4, n4) * pow(p1, n1) * pow(n2, p2) * pow(n3, p3) * pow(n4, p4);
+    if ((n1>0 && p1==0) || (n2>0 && p2==0) || (n3>0 && p3==0) || (n4>0 && p4==0))
+        return 0.0;
+    float coeff, t1, t2, t3, t4;
+
+    coeff = lgamma(n1+n2+n3+n4+1) - lgamma(n1+1) - lgamma(n2+1) - lgamma(n3+1) - lgamma(n4+1);
+    t1 = p1!=0 ? n1*log(p1) : 0.0;
+    t2 = p2!=0 ? n2*log(p2) : 0.0;
+    t3 = p3!=0 ? n3*log(p3) : 0.0;
+    t4 = p4!=0 ? n4*log(p4) : 0.0;
+    return exp(coeff+t1+t2+t3+t4);
+}
 
 // Non-match MLE estimator for f_ab,f_a,f_b
 
@@ -217,21 +230,8 @@ void match_frequency(int w_ab,int w_a,int w_b,int w_tot,float& f_a,float& f_b,fl
 
 float nonmatch_instant_probability(int w_ab,int w_a,int w_b,int w_tot,float f_ab,float f_a,float f_b)
 {
-    // We need to operate in logs unfortunately, since floating decimals seem to lose information
-    float a = nCk(w_tot,w_a+w_ab)*pow(f_a,w_a+w_ab)*pow((1.-f_a),w_tot-(w_a+w_ab)); 
-    float b = nCk(w_a+w_ab,w_ab)*pow(f_b,w_ab)*pow((1.-f_b),w_a); 
-    float c = nCk(w_tot-(w_a+w_ab),w_b)*pow(f_b,w_b)*pow((1.-f_b),w_tot-(w_a+w_b+w_ab)); 
-
-    //DELETE 
-    if (a*b*c > 1)
-    {
-        cout << w_ab << "  "<< w_a << "  "<< w_b << "  " << w_tot << "  " << f_b << endl;
-        cout << a << "  " << b << "  " << c << "  letters" << endl;
-        cout << endl;
-    }
-
-
-    return a*b*c;
+    double val =  multinomial_prob4(w_ab, w_a, w_b, w_tot-w_ab-w_a-w_b, f_a*f_b, f_a*(1-f_b), f_b*(1-f_a), (1-f_a)*(1-f_b));
+    return val;
 }
 
 
@@ -239,12 +239,8 @@ float nonmatch_instant_probability(int w_ab,int w_a,int w_b,int w_tot,float f_ab
 
 float match_instant_probability(int w_ab,int w_a,int w_b,int w_tot,float f_ab,float f_a,float f_b)
 {
-    float prob = 0.f;float int_prob;
-    for( int w = 0.f; w < w_ab+1; w += 1 ){
-        int_prob = nonmatch_instant_probability(w_ab-w,w_a,w_b,w_tot-w,f_ab,f_a,f_b);        
-        prob += (nCk(w_tot,w)*pow(f_ab,w)*pow((1-f_ab),(w_tot-w)))*int_prob;
-    }
-    return prob;
+    double val =  multinomial_prob4(w_ab, w_a, w_b, w_tot-w_ab-w_a-w_b, f_a*f_b+f_ab-f_a*f_b*f_ab, f_a*(1-f_b)*(1-f_ab), f_b*(1-f_a)*(1-f_ab), (1-f_a)*(1-f_b)*(1-f_ab));
+    return val;
 }
 
 
