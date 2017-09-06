@@ -26,8 +26,6 @@ It is written in C++ so that execution speed can be improved 20-fold
 
 using namespace std;
 
-// This is a trivial edit
-
 ///////////////////////
 /// DATA PROCESSING ///
 ///      METHODS    ///
@@ -280,7 +278,8 @@ float match_probability(int w_ab,int w_a,int w_b,int w_tot)
 void match_score(int w_ab,int w_a,int w_b,int w_tot,float& score,float& freq)
 {
     // If there are two or fewer matches, its unlikely to be real
-    if ( w_ab <= 2 ){
+    // JB - changed to 3 or fewer matches to be same as backup
+    if ( w_ab <= 3 ){
         score = 0.f;
         freq = 0.f;
     }
