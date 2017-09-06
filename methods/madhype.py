@@ -376,6 +376,13 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,r
     elif not real_data:
         # recalls real matches
         real_matches = data.metadata['cells']
+
+        # parse lines in results file
+        ab_edges, ab_freqs, ab_scores = [],[],[]
+        for line in lines_ab:
+            ab_edges.append((int(line[2]),int(line[3])))
+            ab_freqs.append(float(line[1]))
+            ab_scores.append(float(line[0]))
         
         # deposit results in the collect results function 
         compiler = CollectResults()
