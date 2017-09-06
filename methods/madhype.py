@@ -96,14 +96,9 @@ def multithread_madhype(cores,data,args):
     arg_lists = [args+[str(i+1)] for i in xrange(cores)] 
     
     # create threads and start the engines
-    threads = []
-    for i,args in zip(xrange(cores),arg_lists):
-        t = threading.Thread(name='thread-'+str(i+1),target=madhype_thread, args=(args,))
-        threads.append(t)
-        t.start() # start task 
+    pool = multiprocessing.Pool(processes = cores)
+    pool.map(madhype_thread, arg_lists)
 
-    for t in threads:    
-        t.join() # wait until full completion 
     # let us know how long everything took
     print 'Multithreaded C++ full implementation took {} seconds.\n'.format(datetime.now()-startTime)
 
@@ -319,7 +314,7 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,r
     core_count = determine_core_usage(cores) # calls simple function to figure out core counts
 
     # C++ embedding  
-    args = [str(w_tot),str(-math.log10(1.-pair_threshold))]
+    args = [str(w_tot),str(-math.log10(1./pair_threshold - 1))]
     
     startTime = datetime.now()
 
@@ -376,6 +371,13 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,r
     elif not real_data:
         # recalls real matches
         real_matches = data.metadata['cells']
+
+        # parse lines in results file
+        ab_edges, ab_freqs, ab_scores = [],[],[]
+        for line in lines_ab:
+            ab_edges.append((int(line[2]),int(line[3])))
+            ab_freqs.append(float(line[1]))
+            ab_scores.append(float(line[0]))
         
         # deposit results in the collect results function 
         compiler = CollectResults()

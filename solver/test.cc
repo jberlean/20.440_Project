@@ -26,8 +26,6 @@ It is written in C++ so that execution speed can be improved 20-fold
 
 using namespace std;
 
-// This is a trivial edit
-
 ///////////////////////
 /// DATA PROCESSING ///
 ///      METHODS    ///
@@ -192,7 +190,7 @@ double nCk(int n, int k)
 
 // Non-match MLE estimator for f_ab,f_a,f_b
 
-float nonmatch_frequency(int w_ab,int w_a,int w_b,int w_tot,float& f_a,float& f_b,float& f_ab)
+void nonmatch_frequency(int w_ab,int w_a,int w_b,int w_tot,float& f_a,float& f_b,float& f_ab)
 {
     f_ab = (float)(w_ab)/(float)(w_tot);
     f_a = (float)(w_a + w_ab)/(float)(w_tot);
@@ -202,7 +200,7 @@ float nonmatch_frequency(int w_ab,int w_a,int w_b,int w_tot,float& f_a,float& f_
 
 // Match MLE estimator for f_ab,f_a,f_b
 
-float match_frequency(int w_ab,int w_a,int w_b,int w_tot,float& f_a,float& f_b,float& f_ab)
+void match_frequency(int w_ab,int w_a,int w_b,int w_tot,float& f_a,float& f_b,float& f_ab)
 {
     if ( w_tot-w_ab == 0 ){ 
         f_a = 0.f; 
@@ -280,7 +278,8 @@ float match_probability(int w_ab,int w_a,int w_b,int w_tot)
 void match_score(int w_ab,int w_a,int w_b,int w_tot,float& score,float& freq)
 {
     // If there are two or fewer matches, its unlikely to be real
-    if ( w_ab <= 2 ){
+    // JB - changed to 3 or fewer matches to be same as backup
+    if ( w_ab <= 3 ){
         score = 0.f;
         freq = 0.f;
     }
@@ -395,6 +394,7 @@ int main(int argc, char *argv[])
     vector<string> results;
     float score, freq;  // Assign empty score/freq variables
 
+    
     // Iterate through pairs 
     for (int i = 0; i < uniques_a.size(); i ++)
     {
@@ -406,7 +406,7 @@ int main(int argc, char *argv[])
             int w_b = chain_count_b[j] - w_ab; 
             score = scores[Index(w_ab,w_a,w_b,w_tot)];
             freq = freqs[Index(w_ab,w_a,w_b,w_tot)];
-             
+
             // Save results that have a score above threshold
             if (score > threshold) 
             {
