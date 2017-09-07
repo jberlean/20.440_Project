@@ -104,12 +104,12 @@ def main(mode='coast2coast'):
         ### analysis on presented data
         filesX,filesY = subjectXYdata(dirnameX,dirnameY) # returns dictionaries
         catalog_repertoire(filesX,filesY,overwrite=False) 
-        data = data_assignment(dirname_exp,threshold=(5,92),overwrite=False,silent=False) # no save due to memory
+        data = data_assignment(dirname_exp,threshold=(4,91),overwrite=False,silent=False) # no save due to memory
 
         ### run analyis (mad-hype)
         startTime = datetime.now()
         
-        results_madhype = madhype.solve(data,pair_threshold=0.9999,verbose=0,real_data=True,all_pairs=False,repertoire_adjustment=False,cores=8)
+        results_madhype = madhype.solve(data,pair_threshold=0.9,verbose=0,real_data=True,all_pairs=False,repertoire_adjustment=False,cores=8)
         pickle.dump(results_madhype,open('./pickles/results_{}.p'.format(dirname_exp[-1]),'wb'))
         print 'MAD-HYPE took {} seconds.\n'.format(datetime.now()-startTime)
         

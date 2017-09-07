@@ -323,7 +323,7 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,r
 
     # First, do the necessary A/B pairs:
     passed_data = [a_uniques,b_uniques,a_wells,b_wells]
-    multithread_madhype(core_count,passed_data,args)
+    #multithread_madhype(core_count,passed_data,args)
     lines_ab = collect_results(core_count)
 
     if repertoire_adjustment:
