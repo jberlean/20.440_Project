@@ -26,123 +26,107 @@ import time
 import os
 import pickle
 import itertools
+import multiprocessing
+import threading
+import collections
 
 # nonstandard libraries
+import matplotlib.pyplot as plt # temporary, delete me later
+from datetime import datetime
 import numpy as np
 import scipy.misc
-#import matplotlib.pyplot as plt
-#from seq_generator import SequencingGenerator as SeqGen
-#from seq_data import SequencingData
 
 
-'''
-Factory Methods
-'''
-
-# N choose K (OUTDATED, slower by ~25x)
-def nCk_old(n, r):
-    r = min(r, n-r)
-    if r == 0: return 1
-    numer = reduce(op.mul, xrange(n, n-r, -1))
-    denom = reduce(op.mul, xrange(1, r+1))
-    return numer//denom
-
-# N choose K
-def nCk(n, r):
-    return scipy.misc.comb(n,r)
-    
-'''
-Frequency Estimators
-'''
-
-# non-match MLE estimator for f_a,f_b,f_ab
-def nonmatch_frequency(w_ab,w_a,w_b,w_tot):
-    return float(w_ab)/w_tot,float(w_a+w_ab)/w_tot,float(w_b+w_ab)/w_tot
-
-# MLE estimator for f_a,f_b,f_ab
-def match_frequency(w_ab,w_a,w_b,w_tot):
-    if w_tot-w_ab == 0: f_a = 0
-    else: f_a = float(w_a)/(w_tot-w_ab)
-    if w_tot-w_ab == 0: f_b = 0
-    else: f_b = float(w_b)/(w_tot-w_ab)
-    f_ab = max((0,1. - (1.-(float(w_ab)/w_tot))/(1-f_a*f_b)))
-    return f_ab,f_a,f_b
-
-'''
-Probability Calculators
-'''
-
-# prior probability
-def nonmatch_probability(w_ab,w_a,w_b,w_tot):
-    w_ab,w_a,w_b,w_tot = int(w_ab),int(w_a),int(w_b),int(w_tot)
-    f_ab,f_a,f_b = nonmatch_frequency(w_ab,w_a,w_b,w_tot)
-    prob = instance_probability(w_ab,w_a,w_b,w_tot,f_ab,f_a,f_b)
-    if prob == 0.: 
-        return float('-inf')
-    return math.log10(prob)
-
-def match_probability(w_ab,w_a,w_b,w_tot):
-    if w_ab == 0: return float('nan')
-    w_ab,w_a,w_b,w_tot = int(w_ab),int(w_a),int(w_b),int(w_tot)
-    f_ab,f_a,f_b = match_frequency(w_ab,w_a,w_b,w_tot)
-    prob_total = 0
-    for w in xrange(0,int(w_ab)+1):
-        prob_total += (nCk(w_tot,w)*(f_ab**(w))*((1-f_ab)**(w_tot-(w))))*instance_probability(w_ab-w,w_a,w_b,w_tot-w,f_ab,f_a,f_b)        
-    if prob_total == 0.: return float('-inf')
-    return math.log10(prob_total)
-
-def instance_probability(w_ab,w_a,w_b,w_tot,f_ab,f_a,f_b):
-    a = nCk(w_tot,w_a+w_ab)*(f_a**(w_a+w_ab))*((1-f_a)**(w_tot-(w_a+w_ab)))
-    b = nCk(w_a+w_ab,w_ab)*(f_b**w_ab)*((1-f_b)**(w_a+w_ab-w_ab))
-    c =  nCk(w_tot-(w_a+w_ab),w_b)*(f_b**w_b)*((1-f_b)**(w_tot-(w_a+w_b+w_ab)))
-    return a*b*c
 
 '''
 Specialty Calculators
 '''
-    
-def self_occurence(v):
-    temp = np.matmul(v,np.transpose(v))
-    np.fill_diagonal(temp,0)
-    return temp
+def chunkIt(seq, num):
+    avg = len(seq) / float(num)
+    out = []
+    last = 0.0
+    while last < len(seq):
+        out.append(seq[int(last):int(last + avg)])
+        last += avg
+    return out
 
-def match_score(w_ab,w_a,w_b,w_tot, match_prior = 0.5):
-    if w_ab == 0: 
-        return 0.,0.
-    else:
-        mp,nmp = match_probability(w_ab,w_a,w_b,w_tot),nonmatch_probability(w_ab,w_a,w_b,w_tot)
-        f_ab,_,_ = match_frequency(w_ab,w_a,w_b,w_tot)
-        return (10**mp * match_prior)/(10**mp * match_prior + 10**nmp * (1-match_prior)),f_ab
-
-# TODO: what do I even do?
-def possible_matches(real_matches,img_ab,a_uniques,b_uniques):
-    w_ab = np.sum(img_ab[:,:,:],axis=2)
-    real = []
-    for rm in real_matches:
-        try: 
-            i,j = a_uniques.index(rm[0]),b_uniques.index(rm[1])
-            if w_ab[i,j] > 0: real.append(rm)
-        except ValueError: # if a real match never even occurs
-            pass
-    return real
-
-def precalculate_match_scores(w_tot,match_prior = 0.5):
-    scores,freqs = np.zeros((w_tot+1,w_tot+1,w_tot+1)),np.zeros((w_tot+1,w_tot+1,w_tot+1))
-    print ''
-    for w_ab in xrange(w_tot+1):
-        for w_a in xrange(w_tot+1):
-            for w_b in xrange(w_tot+1):
-                if w_ab + w_a + w_b > w_tot: 
-                    continue
-                else:
-                    scores[w_ab][w_a][w_b],freqs[w_ab][w_a][w_b] = match_score(w_ab,w_a,w_b,w_tot,match_prior) # effectively take out prior
-        #print 'Finished {}/{}...'.format(w_ab,w_tot)
-    return scores,freqs
+# N choose K
+def nCk(n, r):
+    return scipy.misc.comb(n,r)
 
 '''
 Important Functions
 '''
 
+def madhype_thread(args):
+    startTime = datetime.now() 
+    os.system(os.getcwd() + '/solver/test_backup {} {} {}'.format(*args))
+    print 'Thread-{} took {} seconds.\n'.format(args[-1],datetime.now()-startTime)
+
+
+def determine_core_usage(cores): 
+    if cores == 'max':
+        print 'Declared max CPU core usage ({})...'.format(multiprocessing.cpu_count())
+        return multiprocessing.cpu_count()
+    elif multiprocessing.cpu_count() < cores:
+        print 'Number of declared cores larger than detected, reducing usage {} -> {}'.format(
+                cores,multiprocessing.cpu_count())
+        return multiprocessing.cpu_count()
+    else:
+        return cores
+
+def multithread_madhype(cores,data,args):
+    # start a timer
+    startTime = datetime.now()
+
+    a_uniques,b_uniques,a_wells,b_wells = data # unpackage data 
+
+    # try to reduce dependencies on data processing here
+    for i,a_u in enumerate(chunkIt(a_uniques,cores)):
+        with open('./solver/chain_data_a_{}.txt'.format(i+1),'w') as f:
+            for w in a_u: f.write('{}'.format(str(a_wells[w]))[1:-1]+'\n')
+        with open('./solver/uniques_a_{}.txt'.format(i+1),'w') as f:
+            for w in a_u: f.write('{}\n'.format(w))
+    with open('./solver/chain_data_b.txt','w') as f:
+        for w in b_uniques: f.write('{}'.format(str(b_wells[w]))[1:-1]+'\n')
+    with open('./solver/uniques_b.txt','w') as f:
+        for w in b_uniques: f.write('{}\n'.format(w))
+
+    # create parameter sets for each core
+    arg_lists = [args+[str(i+1)] for i in xrange(cores)] 
+    
+    # create threads and start the engines
+    pool = multiprocessing.Pool(processes = cores)
+    pool.map(madhype_thread, arg_lists)
+
+    # let us know how long everything took
+    print 'Multithreaded C++ full implementation took {} seconds.\n'.format(datetime.now()-startTime)
+
+
+"""
+Compiles the results from multiple core outputs, returns a dictionary of results
+"""
+def collect_results(core_count):
+    lines = []
+    # get all the results into one list
+    for i in xrange(core_count):
+        with open('results_{}.txt'.format(i+1),'r') as f:
+            lines += [l.strip().split('\t') for l in f.readlines()]
+    # save in clean form 
+    return lines
+
+def export_results(ab_lines,aa_lines,bb_lines):
+    # initialize list
+    results = []
+    # neatly packages all the data from AB,AA,BB
+    for lines in [ab_lines,aa_lines,bb_lines]:
+        edges = [(int(l[2]),int(l[3])) for l in lines]
+        freqs = [float(l[1]) for l in lines]
+        scores = [float(l[0]) for l in lines]
+        results.append({'edges':edges,'freqs':freqs,'scores':scores})
+    # return results
+    return {'AB':results[0],'AA':results[1],'BB':results[2]}
+    
 '''
 
 Name: directional_matches
@@ -301,87 +285,99 @@ class CollectResults:
 The Meat-and-Potatoes Function
 '''
 # Verbose: on range 0 to 9
-# TODO: verbose levels
-def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=True):
+# Adjustment: refers to the prior distribution adjustment account for repertoire density error
+def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,repertoire_adjustment=False,cores='max'):
     
     if verbose >= 5: silent = False
     else: silent = True
-    
-    # find uniques
+
+    w_tot = len(data.well_data)
+
+    # Find uniques
     a_uniques = list(set([a for well in data.well_data for a in well[0]]))
     b_uniques = list(set([b for well in data.well_data for b in well[1]]))
 
-    # sort in ascending order
-    sorted(a_uniques,key=int)
-    sorted(b_uniques,key=int)
-
-    # counts of each unique in wells
-    w_tot = len(data.well_data)
-    print 'W_tot:',w_tot
-
-    # create dictionaries for well presence
+    # Generate reverse dictionary
     a_wells = dict([(a_u,[]) for a_u in a_uniques])
     b_wells = dict([(b_u,[]) for b_u in b_uniques])
     
-    if verbose >= 1: print 'Starting variable creation...'
+    if verbose >= 1: print 'Starting reverse dictionary creation...'
     
-    # TODO: Replace with well_dictionary method
     # creates all the necessary images of the data
     for w,well in enumerate(data.well_data):
         for a in well[0]: a_wells[a].append(w) # drop well indices in each unique chains entry
         for b in well[1]: b_wells[b].append(w) # drop well indices in each unique chains entry
-        print 'Image generation progress... {}%\r'.format(100*(w+1)/w_tot),
-
+        print 'Reverse dictionary progress... {}%\r'.format(100*(w+1)/w_tot),
     print ''
 
-    if verbose >= 1: print 'Starting edge detection...'
-            
-    # Setup threshold values (TODO: better way to distinguish ab,ba from aa,bb
-    t = pair_threshold
-    t_shared = 1 - (1 - pair_threshold)**2
-            
+    # detect the appropriate amount of core usage
+    core_count = determine_core_usage(cores) # calls simple function to figure out core counts
+
+    # C++ embedding  
+    args = [str(w_tot),str(-math.log10(1./pair_threshold - 1))]
     
-    # Find each type of available edge
-    ab_edges,ab_freqs,ab_scores = directional_matches(
-        a_wells,b_wells,a_uniques,b_uniques,w_tot,threshold=t,silent=silent,distinct=True)
-    if verbose >= 2: print 'Finished AB edges!'
+    startTime = datetime.now()
+
+    ### MAD-HYPE multithreaded C++ implementation ###
+    # work horse (which loads everything and sets up threads)
+
+    # First, do the necessary A/B pairs:
+    passed_data = [a_uniques,b_uniques,a_wells,b_wells]
+    multithread_madhype(core_count,passed_data,args)
+    lines_ab = collect_results(core_count)
+
+    if repertoire_adjustment:
+        # make histogram dictionaries for multiplicity adjustments
+        counter_a = collections.Counter([len(wc) for wc in a_wells.values()])
+        counter_b = collections.Counter([len(wc) for wc in b_wells.values()])
+        #counter_a = dict([(k,v*math.log10((nCk(w_tot,k)-1)/nCk(w_tot,k))) for k,v in counter_a.items()])
+        #counter_b = dict([(k,v*math.log10((nCk(w_tot,k)-1)/nCk(w_tot,k))) for k,v in counter_b.items()])
+        # Old set, for later investigation
+        counter_a_old = dict([(k,math.log10(v)) for k,v in counter_a.items()]) 
+        counter_b_old = dict([(k,math.log10(v)) for k,v in counter_b.items()]) 
+        counter_a = dict([(k,math.log10(1./(v*(1./nCk(w_tot,k)) + (1.-(1./nCk(w_tot,k))))))
+            for k,v in counter_a.items()]) 
+        counter_b = dict([(k,math.log10(1./(v*(1./nCk(w_tot,k)) + (1.-(1./nCk(w_tot,k)))))) 
+            for k,v in counter_b.items()]) 
+
+        for k in counter_a.keys():
+            print '{}: {} vs. {}'.format(k,counter_a[k],10.**counter_a_old[k])
+
         
+
+        # make adjustment
+        lines_ab = [[float(l[0]) + 1.0*(counter_a[len(a_wells[int(l[2])])] + counter_b[len(b_wells[int(l[3])])])] + l[1:] for l in lines_ab]
+
+    # Next, consider doing A/A or B/B pairs
     if all_pairs:
-        aa_edges,aa_freqs,aa_scores = directional_matches(
-            a_wells,a_wells,a_uniques,a_uniques,w_tot,threshold=t,silent=silent,distinct=False)
-        if verbose >= 2: print 'Finished AA edges!'
-        bb_edges,bb_freqs,bb_scores = directional_matches(
-            b_wells,b_wells,b_uniques,b_uniques,w_tot,threshold=t,silent=silent,distinct=False)
-        if verbose >= 2: print 'Finished BB edges!'
+        passed_data = [a_uniques,a_uniques,a_wells,b_wells]
+        multithread_madhype(core_count,passed_data,args)
+        lines_aa = collect_results(core_count)
+
+        passed_data = [a_uniques,b_uniques,a_wells,b_wells]
+        multithread_madhype(core_count,passed_data,args)
+        lines_bb = collect_results(core_count)
     else:
-        aa_edges,aa_freqs,aa_scores = [],[],[]
-        bb_edges,bb_freqs,bb_scores = [],[],[]
-        
-    if verbose >= 1: print 'Finished edge detection, analyzing graph...'
-    
+        lines_aa = []
+        lines_bb = []
+
+    # real data post-processing section
     if real_data:
-        results_ab = {'edges':ab_edges,'freqs':ab_freqs,'scores':ab_scores}
-        results_aa = {'edges':aa_edges,'freqs':aa_freqs,'scores':aa_scores}
-        results_bb = {'edges':bb_edges,'freqs':bb_freqs,'scores':bb_scores}
-        results = {'AB':results_ab,'AA':results_aa,'BB':results_bb}
+        # collect results in each core output file
+        results = export_results(lines_ab,lines_aa,lines_bb)
         return results
 
+    # non-so-real data post-processing
     elif not real_data:
+        # recalls real matches
         real_matches = data.metadata['cells']
-        # checks to see these actually occur in data
-        #potential_ab_matches = possible_matches(real_matches,img_ab,a_uniques,b_uniques)
-        
-        # solves for true edges
-        #all_edges = [ab_edges]#,aa_edges,bb_edges]
-        #all_freqs = [ab_freqs]#,aa_freqs,bb_freqs]
-        #all_scores = [ab_scores]#,aa_scores,bb_scores]
-        #all_uniques = [a_uniques,b_uniques]
-       
-        #results_ab = {'edges':ab_edges,'freqs':ab_freqs,'scores':ab_scores}
-        #results_aa = {'edges':aa_edges,'freqs':aa_freqs,'scores':aa_scores}
-        #results_bb = {'edges':bb_edges,'freqs':bb_freqs,'scores':bb_scores}
 
-        #results = {'AB':results_ab,'AA':results_aa,'BB':results_bb}
+        # parse lines in results file
+        ab_edges, ab_freqs, ab_scores = [],[],[]
+        for line in lines_ab:
+            ab_edges.append((int(line[2]),int(line[3])))
+            ab_freqs.append(float(line[1]))
+            ab_scores.append(float(line[0]))
         
         # deposit results in the collect results function 
         compiler = CollectResults()

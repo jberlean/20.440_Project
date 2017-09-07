@@ -60,7 +60,7 @@ Important Functions
 
 def madhype_thread(args):
     startTime = datetime.now() 
-    os.system(os.getcwd() + '/solver/a.out {} {} {}'.format(*args))
+    os.system(os.getcwd() + '/solver/test_backup {} {} {}'.format(*args))
     print 'Thread-{} took {} seconds.\n'.format(args[-1],datetime.now()-startTime)
 
 
