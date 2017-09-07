@@ -71,15 +71,16 @@ class Performance:
         obs_alphas, obs_betas = zip(*data.well_data)
         self.obs_alphas, self.obs_betas = set(sum(obs_alphas, [])), set(sum(obs_betas, []))
 
-        cells_set = set([(a,b) for a,b in self.cells])
-        self.correct_pairs = [p for p in self.pairs if p in cells_set]
-        self.incorrect_pairs = [p for p in self.pairs if p not in cells_set]
+        cell_idx_dict = {c: i for i,c in enumerate(self.cells)}
 
-        pair_idxs = [self.cells.index(p) if p in self.cells else -1 for p in self.pairs]
+        self.correct_pairs = [p for p in self.pairs if p in cell_idx_dict]
+        self.incorrect_pairs = [p for p in self.pairs if p not in cell_idx_dict]
+
+        pair_idxs = [cell_idx_dict[p] if p in cell_idx_dict else -1 for p in self.pairs]
         actual_freqs = [data.metadata['generated_data']['cell_frequencies'][i] if i!=-1 else 0.0 for i in pair_idxs]
         pred_freqs = results['cell_frequencies']
         pred_freqs_CI = results['cell_frequencies_CI']
-        
+
         self.correct_pairs_percent =  100.*len(self.correct_pairs)/len(self.cells)
         self.fdr = 100.*len(self.incorrect_pairs)/len(self.pairs)
         self.mse = np.mean([(f1-f2)**2 for f1,f2 in zip(actual_freqs, pred_freqs)])
@@ -111,14 +112,14 @@ class Testing:
                          ### Experimental Parameters ###
                          'well_total':96,
                          'cell_per_well_distribution':'constant', # distribution of cells in each well
-                         'cell_per_well_total':50, # number of cells per well
+                         'cell_per_well_total':1000, # number of cells per well
                          ### Experimental Noise Parameters ###
                          'chain_misplacement_prob':0.00, # migration to a different well
                          'chain_deletion_prob':0.01, # disappearance of a chain in well
                          ### Repertoire Parameters ###
                          'cell_frequency_distro':'power-law', # can be constant,power-law,Lee,explicit
                          'cell_frequency_alpha':-1, # defining coefficient in the cell frequency distribution
-                         'repertoire_cell_total':[200], # number of cells simulated in repertoire
+                         'repertoire_cell_total':[200000], # number of cells simulated in repertoire
                          'alpha_chain_total':[1],
                          'beta_chain_total':[1],
                          ### Metadata Parameters
@@ -192,10 +193,10 @@ class Testing:
             results['backup_madhype'] = backup_madhype.solve(self.data,pair_threshold=0.9,verbose=0) # not stringent
             print 'MAD-HYPE took {} seconds.\n'.format(datetime.now()-startTime)
 
-        if 'alphabetr' in self.solver_methods:
-            startTime = datetime.now()
-            results['alphabetr'] = alphabetr.solve(self.data,pair_threshold=0.1) # not stringent
-            print 'ALPHABETR took {} seconds.\n'.format(datetime.now()-startTime)
+        #if 'alphabetr' in self.solver_methods:
+        #    startTime = datetime.now()
+        #    results['alphabetr'] = alphabetr.solve(self.data,pair_threshold=0.1) # not stringent
+        #    print 'ALPHABETR took {} seconds.\n'.format(datetime.now()-startTime)
 
 
         for k,v in results.items():
