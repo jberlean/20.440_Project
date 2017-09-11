@@ -47,13 +47,13 @@ void Print(const vector<int>& v){
 }
 
 
-int intersection(char *a, char *b, int size)
+int intersection(int *a, int *b, int size)
 {
     int r = 0; 
     for (int i = 0; i < size; i++)
     {
         //cout << a[i] << "  " << b[i] << "  " << r << endl;
-        r += a[i]&b[i];
+        r += a[i]*b[i];
     }
     return r;
 }
@@ -126,17 +126,17 @@ vector<int> LoadChainCount(string fname, int unique_count)
 
 
 // Well data load
-char** LoadChainData(string fname,int unique_count,int w_tot) 
+int** LoadChainData(string fname,int unique_count,int w_tot) 
 {
     // Initialize values 
     vector<int> multilevel; 
     
     // Initialize data array
-    char** data = new char*[unique_count];
+    int** data = new int*[unique_count];
     for (int i = 0; i < unique_count; ++i)
     {
-       data[i] = new char[w_tot];
-       memset(data[i],0,sizeof(char)*w_tot);
+       data[i] = new int[w_tot];
+       memset(data[i],0,sizeof(int)*w_tot);
     }
     
     // Process well file and pass to vector
@@ -313,7 +313,7 @@ int main(int argc, char *argv[])
 
     float* scores = new float[(w_tot+1)*(w_tot+1)*(w_tot+1)](); 
     float* freqs = new float[(w_tot+1)*(w_tot+1)*(w_tot+1)](); 
-    
+
     // Fill storage variables
     for( int w_ab = 0; w_ab < w_tot+1; w_ab += 1 ){
         for( int w_a = 0; w_a < w_tot+1; w_a += 1 ){
@@ -330,9 +330,37 @@ int main(int argc, char *argv[])
         cout.flush();
     }
     cout << endl;
+
+
+
+
     
     //const int w_tot = 96;
     //const float threshold = 4.0;
+    /* 
+    // Initialize the storage variables
+    vector<vector<vector<float> > > scores (w_tot+1,vector<vector<w_tot+1> >(w_tot,vector <float>(w_tot+1,0.f))); 
+    vector<vector<vector<float> > > freqs (w_tot+1,vector<vector<w_tot+1> >(w_tot,vector <float>(w_tot+1,0.f))); 
+    float score, freq;  // Assign empty score/freq variables
+    
+    // Fill storage variables
+    for( int w_ab = 0; w_ab < w_tot+1; w_ab += 1 ){
+        for( int w_a = 0; w_a < w_tot+1; w_a += 1 ){
+            for( int w_b = 0; w_b < w_tot+1; w_b += 1 ){
+                if ( w_ab+w_a+w_b <= w_tot ) {
+                    match_score(w_ab,w_a,w_b,w_tot,score,freq);
+                    scores[w_ab][w_a][w_b] = score;
+                    freqs[w_ab][w_a][w_b] = freq;
+                }
+            }
+        }
+        cout << "Progress " << w_ab << "/" << w_tot << "    \r";
+        cout.flush();
+    }
+    cout << endl;
+    */ 
+    
+    
     
     // Declare data variables
     string fname_data_a = "./solver/chain_data_a_" + to_string(index)+ ".txt";
@@ -348,9 +376,9 @@ int main(int argc, char *argv[])
     
     // Load well data for a/b 
     cout << "Loading well data..." << endl;
-    char** chain_data_a = LoadChainData(fname_data_a,uniques_a.size(),w_tot);
+    int** chain_data_a = LoadChainData(fname_data_a,uniques_a.size(),w_tot);
     cout << "Finished loading chain data A!" << endl;
-    char** chain_data_b = LoadChainData(fname_data_b,uniques_b.size(),w_tot);
+    int** chain_data_b = LoadChainData(fname_data_b,uniques_b.size(),w_tot);
     cout << "Finished loading chain data B!" << endl;
 
     // Load well data for a/b 
@@ -389,7 +417,7 @@ int main(int argc, char *argv[])
     cout << endl;
 
     // Output results to txt file
-    ofstream output_file("./solver/results_" + to_string(index) + ".txt");
+    ofstream output_file("./results_" + to_string(index) + ".txt");
     ostream_iterator<string> output_iterator(output_file, "\n");
     copy(results.begin(), results.end(), output_iterator); 
 };

@@ -4,9 +4,6 @@
 Project: 
 MAD-HYPE (Multicell Analytical Deconvolution for High Yield Paired-chain Evaluation)
 
-Update (8/29/2017):
-    Modified script to create dictionaries represeting each well, allows circumventation of checking many sequences
-
 Class(s): 
 (none)
 
@@ -25,7 +22,6 @@ import operator as op
 import time
 import os
 import pickle
-import itertools
 
 # nonstandard libraries
 import numpy as np
@@ -114,7 +110,6 @@ def match_score(w_ab,w_a,w_b,w_tot, match_prior = 0.5):
         f_ab,_,_ = match_frequency(w_ab,w_a,w_b,w_tot)
         return (10**mp * match_prior)/(10**mp * match_prior + 10**nmp * (1-match_prior)),f_ab
 
-# TODO: what do I even do?
 def possible_matches(real_matches,img_ab,a_uniques,b_uniques):
     w_ab = np.sum(img_ab[:,:,:],axis=2)
     real = []
@@ -128,7 +123,6 @@ def possible_matches(real_matches,img_ab,a_uniques,b_uniques):
 
 def precalculate_match_scores(w_tot,match_prior = 0.5):
     scores,freqs = np.zeros((w_tot+1,w_tot+1,w_tot+1)),np.zeros((w_tot+1,w_tot+1,w_tot+1))
-    print ''
     for w_ab in xrange(w_tot+1):
         for w_a in xrange(w_tot+1):
             for w_b in xrange(w_tot+1):
@@ -177,87 +171,66 @@ Returns:
 '''
 # TODO: add stochasicity to well dismissal
 
-def directional_matches(a_wells,b_wells,a_uniqs,b_uniqs,w_tot,threshold=0.99,silent=False,distinct=False):
+def directional_matches(a_wells,b_wells,a_uniqs,b_uniqs,w_tot,threshold=0.99,silent=False,distinct=None):
 
     # important storage variables
     predicted_ab = []
     predicted_frequency = []
     predicted_score = []
-
-    print 'Making C++ data files...'
-    print a_wells
-    
-    with open('chain_data_a.txt','w') as f:
-        for w in a_uniqs: f.write('{}'.format(str(a_wells[w]))[1:-1]+'\n')
-    with open('chain_data_b.txt','w') as f:
-        for w in b_uniqs: f.write('{}'.format(str(b_wells[w]))[1:-1]+'\n')
-    with open('uniques_a.txt','w') as f:
-        for w in a_uniqs: f.write('{}\n'.format(w))
-    with open('uniques_b.txt','w') as f:
-        for w in b_uniqs: f.write('{}\n'.format(w))
-
-    raw_input('Hold...')
         
-    # create dictionaries that map each well dictionary to the reverse (well # -> chains)
-    wells_a = dict([(i,set()) for i in xrange(w_tot)])
-    wells_b = dict([(i,set()) for i in xrange(w_tot)])
+    print ''
 
-    # iterate across both dictionaries
-    print 'Starting reverse well dictionary formation...'
-    for wells_x,x_wells in [(wells_a,a_wells),(wells_b,b_wells)]:
-        for k,v in x_wells.items():
-            for well in v:
-                wells_x[well].add(k)
-    print 'Finished!'
-
-    # find a copy of precalulcated scores, build one if it doesn't exist 
-    if not os.path.exists('./pickles'): os.makedirs('./pickles')
     if os.path.isfile('./pickles/val{}.p'.format(w_tot)): (scores,freqs) = pickle.load(open('./pickles/val{}.p'.format(w_tot),'r'))
     else: 
         scores,freqs = precalculate_match_scores(w_tot, match_prior=0.5)
         pickle.dump((scores,freqs),open('./pickles/val{}.p'.format(w_tot),'w'))
 
+    # check for the dimensionality of a_data,b_data
+    for ind,au in enumerate(a_uniqs): # enumerate just to get a sense of completion
 
-    # start iterating through well sets
-    tested_pairs = set()
-    for w in xrange(w_tot):
-        print len(wells_a[w]),len(wells_b[w])
-        p_tot = len(wells_a[w])*len(wells_b[w])
-        pairs = itertools.product(wells_a[w],wells_b[w])
-        for ind,p in enumerate(pairs):
-            if not distinct and p[0] == p[1]: continue
-            if p in tested_pairs:
-                continue
-            else:
-                # calculate well occurances
-                #w_ab = len([a for a in a_wells[p[0]] if a in b_wells[p[1]]]) 
-                w_ab = len(set(a_wells[p[0]]).intersection(b_wells[p[1]])) # taps in to O(min(a,b)) for set intersection
-                w_a,w_b = len(a_wells[p[0]]),len(b_wells[p[1]])
+        # TODO: reintroduce the unexplained well concept
+        unexplained_wells = list(xrange(w_tot))
 
-                # produce well counts (cross-over removed)
-                n_ab = w_ab
-                n_a,n_b = w_a - n_ab,w_b - n_ab
-                n_tot = w_tot
+        # create counts based on unexplained well data
 
-                # create some catches for obviously bad cases
-                if n_ab <= 3: continue # since atleast 4 occurances, better be higher than 3 matches
-                f_ab = float(w_a*w_b)/(w_tot**2)
+        # assign scores
+        #print ''
+        for ind2,bu in enumerate(b_uniqs):
+            if not distinct: 
+                if au == bu: continue
 
-                # get score and frequency for parameter set
-                score,frequency = scores[n_ab,n_a,n_b],freqs[n_ab,n_a,n_b] 
-                 
-                if score > threshold:
-                    predicted_ab.append(p)
-                    predicted_frequency.append(frequency)
-                    predicted_score.append(score)
+            # produce well counts
+            w_ab = len([a for a in a_wells[au] if a in b_wells[bu]]) 
+            w_a,w_b = len(a_wells[au]),len(b_wells[bu])
 
-                tested_pairs.add(p)
+            # produce well counts (cross-over removed)
+            n_ab = w_ab
+            n_a,n_b = w_a - n_ab,w_b - n_ab
+            n_tot = len(unexplained_wells)
 
-            if ind%1000000 == 0:
-                print 'Finished {}/{}'.format(ind+1,p_tot) 
+            # create some catches for obviously bad cases
+            if n_ab <= 3: continue # since atleast 4 occurances, better be higher than 1 matches
+            f_ab = float(w_a*w_b)/(w_tot**2)
+            #if w_ab < f_ab*n_tot + (n_tot*f_ab*(1-f_ab))**0.5: continue
+
+            #score,frequency = match_score(n_ab,n_a,n_b,n_tot, 1./(len(a_uniqs)*len(b_uniqs)
+            #score,frequency = match_score(n_ab,n_a,n_b,n_tot, 0.5) # effectively take out prior
+            score,frequency = scores[n_ab,n_a,n_b],freqs[n_ab,n_a,n_b] 
+
+
+            if score > threshold:
+                predicted_ab.append((au,bu))
+                predicted_frequency.append(frequency)
+                predicted_score.append(score)
+
+            #print 'Edge detection progress... {}%\r'.format(100*(ind2+1)/len(b_uniqs)),
+
+        #print 'Finished {}/{}'.format(ind,len(a_uniqs)) 
+        #print 'Edge detection progress... {}%\r'.format(100*(ind+1)/len(a_uniqs)),
+        #print 'Edge detection progress... {}%'.format(100*(ind+1)/len(a_uniqs)),
         
     print ''
-     
+    
     return predicted_ab,predicted_frequency,predicted_score # returns edges
 
 
@@ -296,7 +269,6 @@ class CollectResults:
                   }
         return results
 
-
 '''
 The Meat-and-Potatoes Function
 '''
@@ -317,7 +289,6 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=True):
 
     # counts of each unique in wells
     w_tot = len(data.well_data)
-    print 'W_tot:',w_tot
 
     # create dictionaries for well presence
     a_wells = dict([(a_u,[]) for a_u in a_uniques])
@@ -368,20 +339,6 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=True):
 
     elif not real_data:
         real_matches = data.metadata['cells']
-        # checks to see these actually occur in data
-        #potential_ab_matches = possible_matches(real_matches,img_ab,a_uniques,b_uniques)
-        
-        # solves for true edges
-        #all_edges = [ab_edges]#,aa_edges,bb_edges]
-        #all_freqs = [ab_freqs]#,aa_freqs,bb_freqs]
-        #all_scores = [ab_scores]#,aa_scores,bb_scores]
-        #all_uniques = [a_uniques,b_uniques]
-       
-        #results_ab = {'edges':ab_edges,'freqs':ab_freqs,'scores':ab_scores}
-        #results_aa = {'edges':aa_edges,'freqs':aa_freqs,'scores':aa_scores}
-        #results_bb = {'edges':bb_edges,'freqs':bb_freqs,'scores':bb_scores}
-
-        #results = {'AB':results_ab,'AA':results_aa,'BB':results_bb}
         
         # deposit results in the collect results function 
         compiler = CollectResults()
@@ -392,8 +349,6 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=True):
         if verbose >= 1: print 'Finished!'
         
         return compiler.export() 
-    
-    
 
     '''
     Scanning for alpha -> beta graph edges

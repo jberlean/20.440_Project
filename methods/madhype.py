@@ -65,7 +65,7 @@ def madhype_thread(args):
         > args: list or tuple, consisting of (w_tot, threshold, process #)
     '''
     startTime = datetime.now() # start a timeer for processing
-    os.system(os.getcwd() + '/solver/a.out {} {} {}'.format(*args))
+    os.system(os.getcwd() + '/solver/test {} {} {}'.format(*args))
     print 'Process-{} took {} seconds.\n'.format(args[-1],datetime.now()-startTime) # update on processing time
 
 
@@ -122,7 +122,7 @@ def multithread_madhype(cores,data,args):
 """
 Compiles the results from multiple core outputs, returns a dictionary of results
 """
-def collect_results(core_count,skip_run):
+def collect_results(core_count,skip_run=False):
     lines = []
     if not skip_run: dirname = 'solver/'
     else: dirname = 'saved_data/'+skip_run+'/'

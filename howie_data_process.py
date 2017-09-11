@@ -97,6 +97,22 @@ def main(mode='coast2coast'):
     params = Parameters(default_parameters())
 
     if mode == 'coast2coast':
+        custom_params = {
+                        'max_threshold':None,
+                        'pair_threshold':1,
+                        'verbose':0,
+                        'real_data':True,
+                        'all_pairs':False,
+                        'repertoire_adjustment':False,
+                        'cores':8,
+                        'skip_run':'exp1',
+                        'record_hits':True,
+                        'plot_auroc':False
+                        }
+
+        params.update(custom_params)
+
+
         ### directory assignments
         dirnameX = '/home/pholec/Dropbox (MIT)/MAD-HYPE/data/howie/subjectX'
         dirnameY = '/home/pholec/Dropbox (MIT)/MAD-HYPE/data/howie/subjectY'
@@ -111,13 +127,14 @@ def main(mode='coast2coast'):
         ### run analyis (mad-hype)
         startTime = datetime.now()
         
-        results_madhype = madhype.solve(data,pair_threshold=0.9,verbose=0,real_data=True,all_pairs=False,repertoire_adjustment=False,cores=8,skip_run='exp1')
+        #results_madhype = madhype.solve(data,pair_threshold=0.9,verbose=0,real_data=True,all_pairs=False,repertoire_adjustment=False,cores=8,skip_run='exp1')
+        results_madhype = madhype.solve(data,custom_params=params.dict())
         pickle.dump(results_madhype,open('./pickles/results_{}.p'.format(dirname_exp[-1]),'wb'))
         print 'MAD-HYPE took {} seconds.\n'.format(datetime.now()-startTime)
         
         ### process results
         results = pickle.load(open('./pickles/results_{}.p'.format(dirname_exp[-1]),'r'))
-        interpret_results(data,results,dirname_exp)
+        recordH,recordM,scoresH,scoresM = interpret_results(data,results_madhype,dirname_exp,params)
 
     elif mode == 'histograms':
         """ 
@@ -227,6 +244,7 @@ def interpret_results(data,results,dirname,params={}):
     all_results = results_ab  + results_aa + results_bb
 
     # map results using data dictionaries
+    print 'Here',params.dict
     xH,yH,r1,s1 = map_results(howie_results,data,params)
     xM,yM,r2,s2 = map_results(all_results,data,params)
 
@@ -567,6 +585,7 @@ class Parameters:
         print params
         for key, value in params.items():
             setattr(self, key, value)
+            print key, self.__dict__[key]
         # can apply checks afterward
 
     # initialize class with default dictionary
