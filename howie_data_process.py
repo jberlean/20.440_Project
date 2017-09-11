@@ -94,6 +94,8 @@ def dbm_check(*fnames):
 
 def main(mode='coast2coast'):
 
+    params = Parameters(default_parameters())
+
     if mode == 'coast2coast':
         ### directory assignments
         dirnameX = '/home/pholec/Dropbox (MIT)/MAD-HYPE/data/howie/subjectX'
@@ -109,13 +111,49 @@ def main(mode='coast2coast'):
         ### run analyis (mad-hype)
         startTime = datetime.now()
         
-        results_madhype = madhype.solve(data,pair_threshold=0.9,verbose=0,real_data=True,all_pairs=False,repertoire_adjustment=False,cores=8)
+        results_madhype = madhype.solve(data,pair_threshold=0.9,verbose=0,real_data=True,all_pairs=False,repertoire_adjustment=False,cores=8,skip_run='exp1')
         pickle.dump(results_madhype,open('./pickles/results_{}.p'.format(dirname_exp[-1]),'wb'))
         print 'MAD-HYPE took {} seconds.\n'.format(datetime.now()-startTime)
         
         ### process results
         results = pickle.load(open('./pickles/results_{}.p'.format(dirname_exp[-1]),'r'))
         interpret_results(data,results,dirname_exp)
+
+    elif mode == 'histograms':
+        """ 
+        This mode is for making a histogram of scores 
+        """
+        custom_params = {
+                        'max_threshold':None,
+                        'pair_threshold':1,
+                        'verbose':0,
+                        'real_data':True,
+                        'all_pairs':False,
+                        'repertoire_adjustment':False,
+                        'cores':8,
+                        'skip_run':'exp1',
+                        'record_hits':True,
+                        'plot_auroc':False
+                        }
+
+        params.update(custom_params)
+
+        ### directory assignments
+        dirnameX = '/home/pholec/Dropbox (MIT)/MAD-HYPE/data/howie/subjectX'
+        dirnameY = '/home/pholec/Dropbox (MIT)/MAD-HYPE/data/howie/subjectY'
+        dirname_exp = '/home/pholec/Dropbox (MIT)/MAD-HYPE/data/howie/experiment1'
+
+        ### analysis on presented data
+        filesX,filesY = subjectXYdata(dirnameX,dirnameY) # returns dictionaries
+        data = data_assignment(dirname_exp,threshold=(4,91),overwrite=False,silent=False) # no save due to memory
+
+        ### run analyis (mad-hype)
+        results_madhype = madhype.solve(data,custom_params=params.dict())
+        
+        ### process results
+        recordH,recordM,scoresH,scoresM = interpret_results(data,results_madhype,dirname_exp,params)
+        make_histogram(recordM,scoresM)
+         
     
     elif mode == 'analysis':
         ### directory assignments
@@ -129,6 +167,7 @@ def main(mode='coast2coast'):
         data = data_assignment(dirname_exp,threshold=(5,91),overwrite=False,silent=False) # no save due to memory
         results = pickle.load(open('./pickles/results_{}.p'.format(dirname_exp[-1]),'r'))
         interpret_results(data,results,dirname_exp)
+        
 
         ### process results
             
@@ -138,6 +177,31 @@ def main(mode='coast2coast'):
         check_well_limits(fname_exp1)
         check_well_limits(fname_exp2)
 
+def make_histogram(records,scores):
+    ax = plt.figure()
+    N,bins,patches = plt.hist(scores,bins=np.arange(1.,10.,0.2))
+
+    for i,n in enumerate(N):
+        valid_scores = [r for r,s in zip(records,scores) if s < bins[i+1] and s > bins[i]]
+        acc = float(sum(valid_scores))/len(valid_scores)
+        patches[i].set_facecolor(color_scale(acc,(0.5,1.0)))
+
+    plt.yscale('log')
+    plt.show(block=False)
+    raw_input('Press enter to close...')
+    plt.close()
+
+def color_scale(val,vr):
+    mid = 0.5*(vr[0] + vr[1])
+    if val > mid:
+        a = 2*(val-mid)/(vr[1]-vr[0])
+        return [1.0,1.0,(1.-a)]
+    else:
+        a = min(-2*(val-mid)/(vr[1]-vr[0]),1)
+        return [1.0,(1.-a),1.0]
+
+        
+
 def check_well_limits(dirname):
     
     with open(dirname + '/tcr_pairseq_fdr1pct.pairs','r') as f: 
@@ -146,21 +210,13 @@ def check_well_limits(dirname):
     r = [len(h) for h in howie_results]
     print 'Dirname:'
 
-def interpret_results(data,results,dirname):
+def interpret_results(data,results,dirname,params={}):
     
     # prepare howie results
     with open(dirname + '/tcr_pairseq_fdr1pct.pairs','r') as f: 
         howie_results = [((a[0],a[2]),0.0,-float(a[5])) for i,a in enumerate(csv.reader(f, dialect="excel-tab")) if i != 0]
 
     # prepare madhype results
-    '''
-    results_ab = [(((a[0]),(a[1])),b,c,'AB') for a,b,c in zip(
-        results['AB']['edges'],results['AB']['freqs'],results['AB']['scores'])]
-    results_aa = [(((a[0],a[1]),()),b,c,'AA') for a,b,c in zip(
-        results['AA']['edges'],results['AA']['freqs'],results['AA']['scores'])]
-    results_bb = [(((),(a[0],a[1])),a,b,c,'BB') for a,b,c in zip(
-        results['BB']['edges'],results['BB']['freqs'],results['BB']['scores'])]
-    '''
     results_ab = [(a,b,c,'AB') for a,b,c in zip(
         results['AB']['edges'],results['AB']['freqs'],results['AB']['scores'])]
     results_aa = [(a,b,c,'AA') for a,b,c in zip(
@@ -171,41 +227,45 @@ def interpret_results(data,results,dirname):
     all_results = results_ab  + results_aa + results_bb
 
     # map results using data dictionaries
-    xH,yH = map_results(howie_results,data)
-    xM,yM = map_results(all_results,data)
+    xH,yH,r1,s1 = map_results(howie_results,data,params)
+    xM,yM,r2,s2 = map_results(all_results,data,params)
 
-    # generate figure
-    axes = plt.gca()
+    if params.plot_auroc:
+
+        # generate figure
+        axes = plt.gca()
+        
+        # plot results
+        plt.plot(xH['X'],yH['X'],label='Howie (X)')
+        plt.plot(xH['Y'],yH['Y'],label='Howie (Y)')
+        plt.plot(xM['X'],yM['X'],label='MAD-HYPE (X)')
+        plt.plot(xM['Y'],yM['Y'],label='MAD-HYPE (Y)')
+
+        print 'here'
+        # add error limit
+        xB,yB = np.arange(0,1+int(axes.get_ylim()[1])/200),200*np.arange(0,1+int(axes.get_ylim()[1])/200)
+        plt.plot(xB,yB,label='1% Error',linestyle='--',color='k')
+        axes.set_xlim(left = 0)
+        axes.set_ylim(bottom = 0)
+
+        # stylize graph
+        plt.xlabel('Number of false positives')
+        plt.ylabel('Number of true positives')
+
+        # print out improvement metrics
+        for xm,ym,label in [(xM['X'],yM['X'],'X'),(xM['Y'],yM['Y'],'Y'),(xH['X'],yH['X'],'X (howie)'),(xH['Y'],yH['Y'],'Y (howie)')]:
+            for i,x,y in zip(xrange(len(xm)),xm,ym):
+                if y < 200*x:
+                    print 'Subject {}: {} [X = {}]'.format(label,ym[i-1],xm[i-1])
+                    break
+
+        plt.legend()
+        plt.show(block=False)
+        raw_input('Press enter to continue...')
     
-    # plot results
-    plt.plot(xH['X'],yH['X'],label='Howie (X)')
-    plt.plot(xH['Y'],yH['Y'],label='Howie (Y)')
-    plt.plot(xM['X'],yM['X'],label='MAD-HYPE (X)')
-    plt.plot(xM['Y'],yM['Y'],label='MAD-HYPE (Y)')
-    
-    # add error limit
-    xB,yB = np.arange(0,1+int(axes.get_ylim()[1])/200),200*np.arange(0,1+int(axes.get_ylim()[1])/200)
-    plt.plot(xB,yB,label='1% Error',linestyle='--',color='k')
-    axes.set_xlim([0,600])
-    axes.set_ylim([0,75000])
+    return r1,r2,s1,s2
 
-    # stylize graph
-    plt.xlabel('Number of false positives')
-    plt.ylabel('Number of true positives')
-
-    # print out improvement metrics
-    for xm,ym,label in [(xM['X'],yM['X'],'X'),(xM['Y'],yM['Y'],'Y'),(xH['X'],yH['X'],'X (howie)'),(xH['Y'],yH['Y'],'Y (howie)')]:
-        for i,x,y in zip(xrange(len(xm)),xm,ym):
-            if y < 200*x:
-                print 'Subject {}: {} [X = {}]'.format(label,ym[i-1],xm[i-1])
-                break
-
-    plt.legend()
-    plt.show(block=False)
-    raw_input('Press enter to continue...')
-
-
-def map_results(results,data):
+def map_results(results,data,params={}):
     results.sort(key=lambda x:-float(x[2]))
     print 'Total matches:',len(results)
     x,y = {'X':[0],'Y':[0]},{'X':[0],'Y':[0]}
@@ -214,6 +274,8 @@ def map_results(results,data):
     seq_chain_A = dict([(v,k) for k,v in (data.chain_seq['A']).items()])
     seq_chain_B = dict([(v,k) for k,v in (data.chain_seq['B']).items()])
     pairs = []
+    records = []
+    scores = []
 
     for edge in results:
         if type(edge[0][0]) == int:
@@ -234,20 +296,26 @@ def map_results(results,data):
         if ('X' == x_origin and 'X' == y_origin):
             x['X'].append(x['X'][-1])
             y['X'].append(y['X'][-1]+1)
+            records.append(1)
+            scores.append(edge[2])
         elif ('Y' == x_origin and 'Y' == y_origin):
             x['Y'].append(x['Y'][-1])
             y['Y'].append(y['Y'][-1]+1)
+            records.append(1)
+            scores.append(edge[2])
         elif ('X' == x_origin and 'Y' == y_origin) or ('Y' == x_origin and 'X' == y_origin): 
-            x['X'].append(x['X'][-1]+1)
+            x['X'].append(x['X'][-1]+1) # think about this (should it be 0.5?)
             x['Y'].append(x['Y'][-1]+1)
             y['X'].append(y['X'][-1])
             y['Y'].append(y['Y'][-1])
-        if x['X'][-1] == 600: break
-            
-    print 'Example pairs:'
-    for p in pairs[:20]: print p
+            records.append(0)
+            scores.append(edge[2])
+        else:
+            pass
+        if params.max_threshold:
+            if x['X'][-1] == params.max_threshold: break
 
-    return x,y
+    return x,y,records,scores
 
 def subjectXYdata(dirnameX,dirnameY):
     """ Pulls out file names corresponding the directories submitted, subjects X/Y """
@@ -474,6 +542,8 @@ def data_assignment(dirname,threshold=(4,90),overwrite=True,silent=False):
 
     return Results(well_dict,chain_2_origin,chain_2_sequence)
     
+
+
 class Results:
     """ Quick class to package output data """
     def __init__(self,well_dict,chain_origin,chain_seq):
@@ -482,6 +552,31 @@ class Results:
         self.chain_origin = chain_origin
         self.chain_seq = chain_seq
 
+### Parameters Class & Defaults ###
+
+def default_parameters():
+    return {
+            'mode':'coast2coast',
+           }
+
+class Parameters:
+    """ Creates a default set of analytical parameters, replaces with any input dictionary """ 
+    # use a dictionary to update class attributes
+    def update(self,params={}):
+        # makes params dictionary onto class attributes
+        print params
+        for key, value in params.items():
+            setattr(self, key, value)
+        # can apply checks afterward
+
+    # initialize class with default dictionary
+    def __init__(self,default_params,custom_params={}):
+        self.update(default_params)
+        self.model_parameters = default_params.keys()
+        self.update(custom_params)
+
+    def dict(self):
+        return self.__dict__
 
 # script call catch
 if __name__ == '__main__':
