@@ -62,7 +62,7 @@ class Performance:
         #   metadata.cells,well_data,metadata.generated_data.cell_frequencies
         #
 
-        self.pairs = results['cells']
+        self.pred_cells = results['cells']
         self.cells = data.metadata['cells']
         
         all_alphas, all_betas = zip(*self.cells)
@@ -73,31 +73,76 @@ class Performance:
 
         cell_idx_dict = {c: i for i,c in enumerate(self.cells)}
 
-        self.correct_pairs = [p for p in self.pairs if p in cell_idx_dict]
-        self.incorrect_pairs = [p for p in self.pairs if p not in cell_idx_dict]
+        # Pair data
+        self.pairs = [(a,b) for c in self.cells for a in c[0] for b in c[1]]
+        pairs_set = set(self.pairs)
+        self.pred_pairs = [(a,b) for c in self.pred_cells for a in c[0] for b in c[1]]
+        self.correct_pairs = [p for p in self.pred_pairs if p in pairs_set]
+        self.incorrect_pairs = [p for p in self.pred_pairs if p not in pairs_set]
 
-        pair_idxs = [cell_idx_dict[p] if p in cell_idx_dict else -1 for p in self.pairs]
-        actual_freqs = [data.metadata['generated_data']['cell_frequencies'][i] if i!=-1 else 0.0 for i in pair_idxs]
+        # Overall cell data
+        self.correct_cells = [c for c in self.pred_cells if c in cell_idx_dict]
+        self.incorrect_cells = [c for c in self.pred_cells if c not in cell_idx_dict]
+
+        # Non-dual cell data
+        is_nondual = lambda c:  len(c[0])==1 and len(c[1])==1
+        self.nondual_cells = filter(is_nondual, self.cells)
+        self.pred_nondual_cells = filter(is_nondual, self.pred_cells)
+        self.correct_nondual_cells = [c for c in self.pred_nondual_cells if c in cell_idx_dict]
+        self.incorrect_nondual_cells = [c for c in self.pred_nondual_cells if c not in cell_idx_dict]
+
+        # Dual cell data
+        is_dual = lambda c:  not(is_nondual(c))
+        self.dual_cells = filter(is_dual, self.cells)
+        self.pred_dual_cells = filter(is_dual, self.pred_cells)
+        self.correct_dual_cells = [c for c in self.pred_dual_cells if c in cell_idx_dict]
+        self.incorrect_dual_cells = [c for c in self.pred_dual_cells if c not in cell_idx_dict]
+        
+        # Compute stats on frequency predictions
+        cell_idxs = [cell_idx_dict[c] if c in cell_idx_dict else -1 for c in self.pred_cells]
+        freqs = [data.metadata['generated_data']['cell_frequencies'][i] if i!=-1 else 0.0 for i in cell_idxs]
         pred_freqs = results['cell_frequencies']
         pred_freqs_CI = results['cell_frequencies_CI']
 
-        self.correct_pairs_percent =  100.*len(self.correct_pairs)/len(self.cells)
-        self.fdr = 100.*len(self.incorrect_pairs)/len(self.pairs)
-        self.mse = np.mean([(f1-f2)**2 for f1,f2 in zip(actual_freqs, pred_freqs)])
+        #self.correct_pairs_percent =  100.*len(self.correct_pairs)/len(self.cells)
+        #self.fdr = 100.*len(self.incorrect_pairs)/len(self.pairs)
+        self.rmse = np.sqrt(np.mean([(f1-f2)**2 for f1,f2 in zip(freqs, pred_freqs)]))
 
     def __call__(self):
         print "Solution statistics:"
-        print "  Total cells (in system):", len(self.cells)
+        print "  Total cells (in system): {} ({} non-dual, {} dual)".format(len(self.cells), len(self.nondual_cells), len(self.dual_cells))
         print "  Number of alpha chains (in system):", len(self.all_alphas)
         print "  Number of beta chains (in system):", len(self.all_betas)
         print "  Number of alpha chains (observed):", len(self.obs_alphas)
         print "  Number of beta chains (observed):", len(self.obs_betas)
-        print "  Total pairs identified:", len(self.pairs)
-        print "  Correct pairs identified: {0} ({1}%)".format(len(self.correct_pairs), self.correct_pairs_percent)
-        print "  Incorrect pairs identified: {0}".format(len(self.incorrect_pairs))
-        print "  False discovery rate: {0}%".format(self.fdr)
-        print "  Mean squared error of frequency guesses: {0}".format(self.mse)
-    
+        print "  Pair statistics:"
+        print "    Total in system:", len(self.pairs)
+        print "    Total identified:", len(self.pred_pairs)
+        print "    Correctly identified: {} ({}%)".format(len(self.correct_pairs), 100.*len(self.correct_pairs)/len(self.pairs))
+        print "    Incorrectly identified:", len(self.incorrect_pairs)
+        print "    FDR: {}%".format(100.*len(self.incorrect_pairs)/len(self.pred_pairs))
+        print "  Overall cell statistics:"
+        print "    Total in system:", len(self.cells)
+        print "    Total identified:", len(self.pred_cells)
+        print "    Correctly identified: {} ({}%)".format(len(self.correct_cells), 100.*len(self.correct_cells)/len(self.cells))
+        print "    Incorrect identified:", len(self.incorrect_cells)
+        print "    FDR: {}%".format(100.*len(self.incorrect_cells)/len(self.pred_cells))
+        print "    RMSE of frequency guesses:", self.rmse
+        if len(self.nondual_cells)>0 and len(self.dual_cells)>0:
+            print "  Non-dual cell statistics:"
+            print "    Total in system:", len(self.nondual_cells)
+            print "    Total identified:", len(self.pred_nondual_cells)
+            print "    Correctly identified: {} ({}%)".format(len(self.correct_nondual_cells), 100.*len(self.correct_nondual_cells)/len(self.nondual_cells))
+            print "    Incorrectly identified:", len(self.incorrect_nondual_cells)
+            if len(self.pred_nondual_cells)>0:  print "    FDR: {}%".format(100.*len(self.incorrect_nondual_cells)/len(self.pred_nondual_cells))
+            print "  Dual cell statistics:"
+            print "    Total in system:", len(self.dual_cells)
+            print "    Total identified:", len(self.pred_dual_cells)
+            print "    Correctly identified: {} ({}%)".format(len(self.correct_dual_cells), 100.*len(self.correct_dual_cells)/len(self.dual_cells))
+            print "    Incorrectly identified:", len(self.incorrect_dual_cells)
+            if len(self.pred_dual_cells)>0:  print "    FDR: {}%".format(100.*len(self.incorrect_dual_cells)/len(self.pred_dual_cells))
+ 
+
 
 
 # TODO: Convert to class
@@ -167,11 +212,13 @@ class Testing:
         gen.set_cells_per_well(self.cell_per_well_distribution, cells_per_well=self.cell_per_well_total)
 
         # iterate through unique declarations of cell packages
-        cells,a_ind,b_ind = [],0,0
-        for r,a,b in zip(self.repertoire_cell_total,self.alpha_chain_total,self.beta_chain_total):
-            cells += gen.generate_cells(r,alpha_start_idx=a_ind, beta_start_idx=b_ind) # removed sharing #'s (a/b)
-            a_ind,b_ind = a_ind + a*r,b_ind + b*r
-        gen.cells = cells
+        #cells,a_ind,b_ind = [],0,0
+        #for r,a,b in zip(self.repertoire_cell_total,self.alpha_chain_total,self.beta_chain_total):
+        #    cells += gen.generate_cells(r,alpha_start_idx=a_ind, beta_start_idx=b_ind) # removed sharing #'s (a/b)
+        #    a_ind,b_ind = a_ind + a*r,b_ind + b*r
+        #gen.cells = cells
+        # Use SequencingGenerator's built-in cell generator (for slightly more realistic repertoire)
+        gen.cells = seq_generator.SequencingGenerator.generate_cells(sum(self.repertoire_cell_total), alpha_dual_prob=0.3, beta_dual_prob=0.0)
 
         ## Save data to a file
         self.data = gen.generate_data()
