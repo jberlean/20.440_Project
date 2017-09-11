@@ -88,8 +88,8 @@ def try_chain_additions_multithread(init_chainsets, a_uniques, b_uniques, cores,
         for w in init_chainsets[i*chunk_size:(i+1)*chunk_size]:
             a1 = alpha_id_to_idx[w[0][0]] if len(w[0])>=1 else -1
             a2 = alpha_id_to_idx[w[0][1]] if len(w[0])>=2 else -1
-            b1 = alpha_id_to_idx[w[1][0]] if len(w[1])>=1 else -1
-            b2 = alpha_id_to_idx[w[1][1]] if len(w[1])>=2 else -1
+            b1 = beta_id_to_idx[w[1][0]] if len(w[1])>=1 else -1
+            b2 = beta_id_to_idx[w[1][1]] if len(w[1])>=2 else -1
             f.write('{},{},{},{}\n'.format(a1,a2,b1,b2))
         f.close()
 
@@ -99,10 +99,25 @@ def try_chain_additions_multithread(init_chainsets, a_uniques, b_uniques, cores,
     # Start processes
     pool = multiprocessing.Pool(processes = cores)
     pool.map(madhype_thread, args_list)
-            
+
+    # Collect and parse results
+    lines = collect_results(cores)
+
+    cells, scores_dict, freqs_dict = [], {}, {}
+    for line in lines:
+        a1,a2,b1,b2 = [int(v) for v in line[2:]]
+        a = () if a1==-1 else (a1,) if a2==-1 else (a1,a2)
+        b = () if b1==-1 else (b1,) if b2==-1 else (b1,b2)
+        c = (a,b)
+        cells.append(c)
+        scores_dict[c] = float(line[0])
+        freqs_dict[c] = float(line[1])
+    return cells, scores_dict, freqs_dict
+
+           
 
 def multithread_madhype(cores,data,args):
-    # start a timer
+   # start a timer
     startTime = datetime.now()
 
     a_uniques,b_uniques,a_wells,b_wells = data # unpackage data 
@@ -120,12 +135,23 @@ def multithread_madhype(cores,data,args):
     # Run first pass (match alphas to betas)
     pass1_args = args + ['0', '1']
     pass1_init = [((a,),()) for a in a_uniques]
-    try_chain_additions_multithread(pass1_init, a_uniques, b_uniques, cores, pass1_args)
+    cells, scores_dict, freqs_dict = try_chain_additions_multithread(pass1_init, a_uniques, b_uniques, cores, pass1_args)
+
+    # Run second pass (add alpha/beta chains to each chain pair to make duals)
+    pass2_args = args + ['1', '1']
+    pass2_init = cells
+    try_chain_additions_multithread(pass2_init, a_uniques, b_uniques, cores, pass2_args)
+
+    
+     
+
 
     
 
     # let us know how long everything took
     print 'Multithreaded C++ full implementation took {} seconds.\n'.format(datetime.now()-startTime)
+
+    return cells, scores_dict, freqs_dict
 
 
 """
@@ -139,6 +165,8 @@ def collect_results(core_count):
             lines += [l.strip().split('\t') for l in f.readlines()]
     # save in clean form 
     return lines
+
+   
 
 def export_results(ab_lines,aa_lines,bb_lines):
     # initialize list
@@ -280,7 +308,7 @@ class CollectResults:
         self.threshold = []
         self.cell_frequencies_CI = []
 
-    def add_results(self,all_edges,all_freqs,all_scores,id):
+    def add_results(self,all_edges,all_freqs,all_scores):
 
         # TODO: add aa/bb solver ( this is non-trivial math )
 
@@ -351,10 +379,10 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,r
 
     # First, do the necessary A/B pairs:
     passed_data = [a_uniques,b_uniques,a_wells,b_wells]
-    multithread_madhype(core_count,passed_data,args)
-    print "Collecting results..."
-    lines_ab = collect_results(core_count)
+    cells, scores_dict, freqs_dict = multithread_madhype(core_count,passed_data,args)
+    #lines_ab = collect_results(core_count)
 
+    # TODO: Modify this to work with new results format
     if repertoire_adjustment:
         # make histogram dictionaries for multiplicity adjustments
         counter_a = collections.Counter([len(wc) for wc in a_wells.values()])
@@ -378,17 +406,17 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,r
         lines_ab = [[float(l[0]) + 1.0*(counter_a[len(a_wells[int(l[2])])] + counter_b[len(b_wells[int(l[3])])])] + l[1:] for l in lines_ab]
 
     # Next, consider doing A/A or B/B pairs
-    if all_pairs:
-        passed_data = [a_uniques,a_uniques,a_wells,b_wells]
-        multithread_madhype(core_count,passed_data,args)
-        lines_aa = collect_results(core_count)
-
-        passed_data = [a_uniques,b_uniques,a_wells,b_wells]
-        multithread_madhype(core_count,passed_data,args)
-        lines_bb = collect_results(core_count)
-    else:
-        lines_aa = []
-        lines_bb = []
+#    if all_pairs:
+#        passed_data = [a_uniques,a_uniques,a_wells,b_wells]
+#        multithread_madhype(core_count,passed_data,args)
+#        lines_aa = collect_results(core_count)
+#
+#        passed_data = [a_uniques,b_uniques,a_wells,b_wells]
+#        multithread_madhype(core_count,passed_data,args)
+#        lines_bb = collect_results(core_count)
+#    else:
+#        lines_aa = []
+#        lines_bb = []
 
     # real data post-processing section
     if real_data:
@@ -398,32 +426,21 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,r
 
     # non-so-real data post-processing
     elif not real_data:
-        print "exporting results..."
         # recalls real matches
         real_matches = data.metadata['cells']
 
-        # parse lines in results file
-        ab_edges, ab_freqs, ab_scores = [],[],[]
-        for line in lines_ab:
-            a1,a2,b1,b2 = [int(v) for v in line[2:]]
-            a = () if a1==-1 else (a1,) if a2==-1 else (a1,a2)
-            b = () if b1==-1 else (b1,) if b2==-1 else (b1,b2)
-            ab_edges.append((a,b))
-            ab_freqs.append(float(line[1]))
-            ab_scores.append(float(line[0]))
-        
-        print "checkpt 1"
+        scores = [scores_dict[c] for c in cells]
+        freqs = [freqs_dict[c] for c in cells]
 
         # deposit results in the collect results function 
         compiler = CollectResults()
-        compiler.add_results(ab_edges,ab_freqs,ab_scores,'AB')
+        compiler.add_results(cells, freqs, scores)
+        #compiler.add_results(ab_edges,ab_freqs,ab_scores,'AB')
         #compiler.add_results(aa_edges,aa_freqs,aa_scores,'AA')
         #compiler.add_results(bb_edges,bb_freqs,bb_scores,'BB')
         
         if verbose >= 1: print 'Finished!'
         
-        print "checkpt 2"
-
         return compiler.export() 
     
     

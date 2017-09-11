@@ -442,6 +442,7 @@ void match_score_dual(int w_abc,int w_ab, int w_ac, int w_bc, int w_a,int w_b, i
         double nmp = nonmatch_probability_dual(w_abc, w_ab, w_ac, w_bc,w_a,w_b, w_c,w_tot);
         match_frequency_dual(w_abc,w_ab,w_ac, w_bc,w_a,w_b,w_c,w_tot,freq,f_ab,f_ac,f_bc,f_a,f_b,f_c);
         score = log10(mp) - log10(nmp);
+        //cout << w_abc << " " << w_ab << " " << w_ac << " " << w_bc << " " << w_a << " " << w_b << " " << w_c << " " << mp << " " << nmp << " " << score << endl;
     }
 }
 
@@ -671,7 +672,7 @@ int main(int argc, char *argv[])
     if (try_alphas) {
         for (int i = 0; i < uniques_a.size(); i++) {
             additions.push_back((chain_t){.is_alpha=true, .id=i});
-            cout << i << " " << additions.back().is_alpha << " " << additions.back().id << endl;
+            //cout << i << " " << additions.back().is_alpha << " " << additions.back().id << endl;
         }
     }
     if (try_betas) {
