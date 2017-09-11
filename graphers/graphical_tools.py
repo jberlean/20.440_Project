@@ -151,47 +151,84 @@ def graphical_network(data,results1 = {'cells':[]},results2 = {'cells':[]},hide_
     igraph.plot(g,**visual_style)
 
     
-def graphical_auroc(results1,results2,hits):
+def graphical_auroc(results1,results2,seqdata):
+
+    def compute_roc_curve(guess, threshold, max_tpr, max_fpr):
+        data_sorted = sorted(zip(guess, threshold), key=lambda v: v[1], reverse=True)
+
+        x,y = [0.],[0.]
+        last_t = max(threshold) + 1
+        for g,t in data_sorted:
+            if g in hits:
+                dx, dy = 0, 1./max_tpr
+            else:
+                dx, dy = 1./max_fpr, 0
+            if last_t != t:
+                x.append(x[-1]+dx)
+                y.append(y[-1]+dy)
+            else:
+                x[-1] += dx
+                y[-1] += dy
+            last_t = t
+        x.append(1.0)
+        y.append(1.0)
+
+        return x, y
+ 
+    obs_alphas, obs_betas = map(lambda l: set(sum(l, [])), zip(*seqdata.well_data))
+
+    hits = set(filter(lambda c: all([a in obs_alphas for a in c[0]] + [b in obs_betas for b in c[1]]), seqdata.metadata['cells']) )
     guess1,guess2 = results1['cells'],results2['cells']
-    pos_count1,pos_count2 = len([g for g in guess1 if g in hits]),len([g for g in guess2 if g in hits])
     thresh1,thresh2 = results1['threshold'],results2['threshold']
-    neg_count1,neg_count2 = len(guess1)-pos_count1,len(guess2)-pos_count2
-    pos_count = max((pos_count1,pos_count2))
+
+    pos_count = len(hits)
+    neg_count = max(len(set(guess1)-set(hits)), len(set(guess2)-set(hits)))
+
+    #pos_count1,pos_count2 = len([g for g in guess1 if g in hits]),len([g for g in guess2 if g in hits])
+    #neg_count1,neg_count2 = len(guess1)-pos_count1,len(guess2)-pos_count2
+    #pos_count = max((pos_count1,pos_count2))
     
-    lims = np.arange(1.,0.,-0.001)
+    #lims = np.arange(1.,0.,-0.001)
     
     x1,y1 = [0],[0]
     x2,y2 = [0],[0]
     
-    for lim in lims:
-        # check for set 1
-        tpr,fpr = 0.,0.
-        for g,t in zip(guess1,thresh1):
-            if t >= lim:
-                if g in hits: tpr += 1
-                else: fpr += 1
-        x1.append(fpr/neg_count1)
-        y1.append(tpr/pos_count)
-        
-        # check for set 2
-        tpr,fpr = 0.,0.
-        for g,t in zip(guess2,thresh2):
-            if t >= lim:
-                if g in hits: tpr += 1
-                else: fpr += 1
-        x2.append(fpr/neg_count2)
-        y2.append(tpr/pos_count)
+    #for lim in lims:
+#        # check for set 1
+#        tpr,fpr = 0.,0.
+#        for g,t in zip(guess1,thresh1):
+#            if t >= lim:
+#                if g in hits: tpr += 1
+#                else: fpr += 1
+#        x1.append(fpr/neg_count1)
+#        y1.append(tpr/pos_count)
+#        
+#        # check for set 2
+#        tpr,fpr = 0.,0.
+#        for g,t in zip(guess2,thresh2):
+#            if t >= lim:
+#                if g in hits: tpr += 1
+#                else: fpr += 1
+#        x2.append(fpr/neg_count2)
+#        y2.append(tpr/pos_count)
 
-    x1,x2 = [x/max(x1) for x in x1],[x/max(x2) for x in x2]
+#    x1,x2 = [x/max(x1) for x in x1],[x/max(x2) for x in x2]
 
-    '''
+    # Compute data for set 1
+    x1,y1=compute_roc_curve(guess1, thresh1, pos_count, neg_count)
+    x2,y2=compute_roc_curve(guess2, thresh2, pos_count, neg_count)
+
+    print min(filter(lambda v: v!=0, thresh1))
+
+    
+    
     print 'Start 1:'
-    for x,y in zip(x1,y1):
+    for x,y in zip(x1,y1)[-10:]:
         print x,y
     print 'Start 2:'
-    for x,y in zip(x2,y2):
+    for x,y in zip(x2,y2)[-10:]:
         print x,y
-    '''
+    
     
     print 'Method 1 auROC: {}'.format(np.trapz(y1,x1))    
     print 'Method 2 auROC: {}'.format(np.trapz(y2,x2))

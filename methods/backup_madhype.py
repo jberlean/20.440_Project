@@ -314,7 +314,8 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,r
     core_count = determine_core_usage(cores) # calls simple function to figure out core counts
 
     # C++ embedding  
-    args = [str(w_tot),str(-math.log10(1./pair_threshold - 1))]
+    new_thresh = -math.log10((1./pair_threshold - 1)) if pair_threshold>0 else float('-inf')
+    args = [str(w_tot),str(new_thresh)]
     
     startTime = datetime.now()
 

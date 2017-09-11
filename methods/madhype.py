@@ -60,7 +60,7 @@ Important Functions
 
 def madhype_thread(args):
     startTime = datetime.now() 
-    os.system(os.getcwd() + '/solver/test {} {} {}'.format(*args))
+    os.system(os.getcwd() + '/solver/test ' + ' '.join(args))
     print 'Thread-{} took {} seconds.\n'.format(args[-1],datetime.now()-startTime)
 
 
@@ -75,29 +75,54 @@ def determine_core_usage(cores):
     else:
         return cores
 
+def try_chain_additions_multithread(init_chainsets, a_uniques, b_uniques, cores, args):
+    # Map alpha/beta chain ids to indices
+    alpha_id_to_idx = {a: i for i,a in enumerate(a_uniques)}
+    beta_id_to_idx = {b: i for i,b in enumerate(b_uniques)}
+
+    # Output process-specific info to data files
+    chunk_size = int(math.ceil(len(init_chainsets) / float(cores)))
+    print len(init_chainsets), chunk_size
+    for i in range(cores):
+        f = open('./solver/initial_{}.txt'.format(i+1), 'w')
+        for w in init_chainsets[i*chunk_size:(i+1)*chunk_size]:
+            a1 = alpha_id_to_idx[w[0][0]] if len(w[0])>=1 else -1
+            a2 = alpha_id_to_idx[w[0][1]] if len(w[0])>=2 else -1
+            b1 = alpha_id_to_idx[w[1][0]] if len(w[1])>=1 else -1
+            b2 = alpha_id_to_idx[w[1][1]] if len(w[1])>=2 else -1
+            f.write('{},{},{},{}\n'.format(a1,a2,b1,b2))
+        f.close()
+
+    # Prep process-specific arguments
+    args_list = [args+[str(i+1)] for i in xrange(cores)]
+
+    # Start processes
+    pool = multiprocessing.Pool(processes = cores)
+    pool.map(madhype_thread, args_list)
+            
+
 def multithread_madhype(cores,data,args):
     # start a timer
     startTime = datetime.now()
 
     a_uniques,b_uniques,a_wells,b_wells = data # unpackage data 
 
-    # try to reduce dependencies on data processing here
-    for i,a_u in enumerate(chunkIt(a_uniques,cores)):
-        with open('./solver/chain_data_a_{}.txt'.format(i+1),'w') as f:
-            for w in a_u: f.write('{}'.format(str(a_wells[w]))[1:-1]+'\n')
-        with open('./solver/uniques_a_{}.txt'.format(i+1),'w') as f:
-            for w in a_u: f.write('{}\n'.format(w))
+    # Output general data used by all processes
+    with open('./solver/chain_data_a.txt','w') as f:
+        for w in a_uniques: f.write('{}'.format(str(a_wells[w]))[1:-1]+'\n')
+    with open('./solver/uniques_a.txt','w') as f:
+        for w in a_uniques: f.write('{}\n'.format(w))
     with open('./solver/chain_data_b.txt','w') as f:
         for w in b_uniques: f.write('{}'.format(str(b_wells[w]))[1:-1]+'\n')
     with open('./solver/uniques_b.txt','w') as f:
         for w in b_uniques: f.write('{}\n'.format(w))
 
-    # create parameter sets for each core
-    arg_lists = [args+[str(i+1)] for i in xrange(cores)] 
+    # Run first pass (match alphas to betas)
+    pass1_args = args + ['0', '1']
+    pass1_init = [((a,),()) for a in a_uniques]
+    try_chain_additions_multithread(pass1_init, a_uniques, b_uniques, cores, pass1_args)
+
     
-    # create threads and start the engines
-    pool = multiprocessing.Pool(processes = cores)
-    pool.map(madhype_thread, arg_lists)
 
     # let us know how long everything took
     print 'Multithreaded C++ full implementation took {} seconds.\n'.format(datetime.now()-startTime)
@@ -260,12 +285,14 @@ class CollectResults:
         # TODO: add aa/bb solver ( this is non-trivial math )
 
         # results['cells'] = [e[0] for edge in all_edges for e in edge] # eventually, when we start doing multiclones
-        if id == 'ab' or id == 'AB':
-            self.cells += [((e[0],),(e[1],)) for e in all_edges]
-        elif id == 'aa' or id == 'AA':
-            self.cells += [((e[0],e[1]),((),)) for e in all_edges]
-        elif id == 'aa' or id == 'AA':
-            self.cells += [(((),),(e[0],e[1])) for e in all_edges]
+        #if id == 'ab' or id == 'AB':
+        #    self.cells += [((e[0],),(e[1],)) for e in all_edges]
+        #elif id == 'aa' or id == 'AA':
+        #    self.cells += [((e[0],e[1]),((),)) for e in all_edges]
+        #elif id == 'aa' or id == 'AA':
+        #    self.cells += [(((),),(e[0],e[1])) for e in all_edges]
+        print all_edges[0]
+        self.cells += all_edges
 
         self.cell_frequencies += [f for f in all_freqs]
         self.threshold += [s for s in all_scores]
@@ -314,7 +341,8 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,r
     core_count = determine_core_usage(cores) # calls simple function to figure out core counts
 
     # C++ embedding  
-    args = [str(w_tot),str(-math.log10(1./pair_threshold - 1))]
+    new_thresh = -math.log10(1./pair_threshold - 1) if pair_threshold>0 else float('-inf')
+    args = [str(w_tot),str(new_thresh)]
     
     startTime = datetime.now()
 
@@ -324,6 +352,7 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,r
     # First, do the necessary A/B pairs:
     passed_data = [a_uniques,b_uniques,a_wells,b_wells]
     multithread_madhype(core_count,passed_data,args)
+    print "Collecting results..."
     lines_ab = collect_results(core_count)
 
     if repertoire_adjustment:
@@ -369,16 +398,22 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,r
 
     # non-so-real data post-processing
     elif not real_data:
+        print "exporting results..."
         # recalls real matches
         real_matches = data.metadata['cells']
 
         # parse lines in results file
         ab_edges, ab_freqs, ab_scores = [],[],[]
         for line in lines_ab:
-            ab_edges.append((int(line[2]),int(line[3])))
+            a1,a2,b1,b2 = [int(v) for v in line[2:]]
+            a = () if a1==-1 else (a1,) if a2==-1 else (a1,a2)
+            b = () if b1==-1 else (b1,) if b2==-1 else (b1,b2)
+            ab_edges.append((a,b))
             ab_freqs.append(float(line[1]))
             ab_scores.append(float(line[0]))
         
+        print "checkpt 1"
+
         # deposit results in the collect results function 
         compiler = CollectResults()
         compiler.add_results(ab_edges,ab_freqs,ab_scores,'AB')
@@ -387,6 +422,8 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,r
         
         if verbose >= 1: print 'Finished!'
         
+        print "checkpt 2"
+
         return compiler.export() 
     
     

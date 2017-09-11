@@ -112,14 +112,14 @@ class Testing:
                          ### Experimental Parameters ###
                          'well_total':96,
                          'cell_per_well_distribution':'constant', # distribution of cells in each well
-                         'cell_per_well_total':1000, # number of cells per well
+                         'cell_per_well_total':500, # number of cells per well
                          ### Experimental Noise Parameters ###
                          'chain_misplacement_prob':0.00, # migration to a different well
                          'chain_deletion_prob':0.01, # disappearance of a chain in well
                          ### Repertoire Parameters ###
                          'cell_frequency_distro':'power-law', # can be constant,power-law,Lee,explicit
                          'cell_frequency_alpha':-1, # defining coefficient in the cell frequency distribution
-                         'repertoire_cell_total':[200000], # number of cells simulated in repertoire
+                         'repertoire_cell_total':[2000], # number of cells simulated in repertoire
                          'alpha_chain_total':[1],
                          'beta_chain_total':[1],
                          ### Metadata Parameters
@@ -185,12 +185,12 @@ class Testing:
     
         if 'madhype' in self.solver_methods:
             startTime = datetime.now()
-            results['madhype'] = madhype.solve(self.data,pair_threshold=0.9,verbose=0) # not stringent
+            results['madhype'] = madhype.solve(self.data,pair_threshold=0.999,verbose=0) # not stringent
             print 'MAD-HYPE took {} seconds.\n'.format(datetime.now()-startTime)
 
         if 'backup_madhype' in self.solver_methods:
             startTime = datetime.now()
-            results['backup_madhype'] = backup_madhype.solve(self.data,pair_threshold=0.9,verbose=0) # not stringent
+            results['backup_madhype'] = backup_madhype.solve(self.data,pair_threshold=0.999,verbose=0) # not stringent
             print 'MAD-HYPE took {} seconds.\n'.format(datetime.now()-startTime)
 
         #if 'alphabetr' in self.solver_methods:
@@ -209,7 +209,9 @@ class Testing:
 
     def probe(self):
          
-        graphical_tools.graphical_data_summary(self.data,self.results) 
+        #graphical_tools.graphical_data_summary(self.data,self.results) 
+
+        graphical_tools.graphical_auroc(self.results[0], self.results[1], self.data)
 
             
 
