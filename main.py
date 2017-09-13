@@ -66,7 +66,7 @@ class Performance:
         self.cells = data.metadata['cells']
         
         all_alphas, all_betas = zip(*self.cells)
-        self.all_alphas,self.all_betas = set(all_alphas),set(all_betas)
+        self.all_alphas,self.all_betas = set([a for alist in all_alphas for a in alist]),set([b for blist in all_betas for b in blist])
 
         obs_alphas, obs_betas = zip(*data.well_data)
         self.obs_alphas, self.obs_betas = set(sum(obs_alphas, [])), set(sum(obs_betas, []))
@@ -76,7 +76,7 @@ class Performance:
         # Pair data
         self.pairs = [(a,b) for c in self.cells for a in c[0] for b in c[1]]
         pairs_set = set(self.pairs)
-        self.pred_pairs = [(a,b) for c in self.pred_cells for a in c[0] for b in c[1]]
+        self.pred_pairs = set([(a,b) for c in self.pred_cells for a in c[0] for b in c[1]])
         self.correct_pairs = [p for p in self.pred_pairs if p in pairs_set]
         self.incorrect_pairs = [p for p in self.pred_pairs if p not in pairs_set]
 
@@ -235,10 +235,10 @@ class Testing:
             results['madhype'] = madhype.solve(self.data,pair_threshold=0.999,verbose=0) # not stringent
             print 'MAD-HYPE took {} seconds.\n'.format(datetime.now()-startTime)
 
-        if 'backup_madhype' in self.solver_methods:
-            startTime = datetime.now()
-            results['backup_madhype'] = backup_madhype.solve(self.data,pair_threshold=0.999,verbose=0) # not stringent
-            print 'MAD-HYPE took {} seconds.\n'.format(datetime.now()-startTime)
+        #if 'backup_madhype' in self.solver_methods:
+        #    startTime = datetime.now()
+        #    results['backup_madhype'] = backup_madhype.solve(self.data,pair_threshold=0.999,verbose=0) # not stringent
+        #    print 'MAD-HYPE took {} seconds.\n'.format(datetime.now()-startTime)
 
         #if 'alphabetr' in self.solver_methods:
         #    startTime = datetime.now()
@@ -258,7 +258,7 @@ class Testing:
          
         #graphical_tools.graphical_data_summary(self.data,self.results) 
 
-        graphical_tools.graphical_auroc(self.results[0], self.results[1], self.data)
+        graphical_tools.graphical_auroc(self.results[0], self.results[0], self.data)
 
             
 

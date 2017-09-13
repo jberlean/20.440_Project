@@ -273,22 +273,96 @@ void nonmatch_frequency(int w_ab,int w_a,int w_b,int w_tot,double& f_a,double& f
 }
 void nonmatch_frequency_dual(int w_abc, int w_ab, int w_ac, int w_bc, int w_a, int w_b, int w_c, int w_tot, double &f_ab, double &f_ac, double &f_bc, double &f_a, double &f_b, double &f_c) {
 
-    // There should be a more accurate set of formulas that takes advantage of the fact we have 7 eqns for 6 vars in the nonmatch case
+    // This is complicated. Basically, we reformulate the well counts in terms of the following well counts:
+    //   w_o = # wells with none of the chains
+    //   w_nbc = # wells without b or c = # wells with only a or nothing
+    //   w_nac = # wells without a or c
+    //   w_nab = # wells without a or b
+    //   w_na = # wells without a
+    //   w_nb = # wells without b
+    //   w_nc = # wells without c
+    // The probabilities associated with each of these categories is easily expressible as a product of (1-f) values:
+    //   p_o = (1-fa)*(1-fb)*(1-fc)*(1-fab)*(1-fac)*(1-fbc)
+    //   p_nbc = (1-fb)*(1-fc)*(1-fab)*(1-fac)*(1-fbc)
+    //   p_nac = (1-fa)*(1-fc)*(1-fab)*(1-fac)*(1-fbc)
+    //   p_nab = (1-fa)*(1-fb)*(1-fab)*(1-fac)*(1-fbc)
+    //   p_na = (1-fa)*(1-fab)*(1-fac)
+    //   p_nb = (1-fb)*(1-fab)*(1-fbc)
+    //   p_nc = (1-fc)*(1-fac)*(1-fbc)
+    // If we take the logarithm of each equation, we can formulate these equations as a single matrix equation
+    // in terms of the logarithms of the inverse cell frequencies as our unknowns. The coefficient matrix is:
+    //  [1 1 1 1 1 1     [log(1-fa)        [log(p_o)
+    //   0 1 1 1 1 1      log(1-fb)         log(p_nbc)
+    //   1 0 1 1 1 1      log(1-fc)         log(p_nac)
+    //   1 1 0 1 1 1  *   log(1-fab)   =    log(p_nab)
+    //   1 0 0 1 1 0      log(1-fac)        log(p_na)
+    //   0 1 0 1 0 1      log(1-fbc)]       log(p_nb)
+    //   0 0 1 0 1 1]                       log(p_nc)]
+    // Although this system of equations is overspecified, we can get the least squares estimate with the pseudoinverse
+    // of the coefficient matrix, which yields
+    //  [log(1-fa)             [ 5 -5  2  2 -2 -2 -2    [log(p_o)
+    //   log(1-fb)               5  2 -5  2 -2 -2 -2     log(p_nbc)
+    //   log(1-fc)         1     5  2  2 -5 -2 -2 -2     log(p_nac)
+    //   log(1-fab)   =   --- * -3  3  3 -4  4  4 -3  *  log(p_nab)
+    //   log(1-fac)        7    -3  3 -4  3  4 -3  4     log(p_na)
+    //   log(1-fbc)]            -3 -4  3  3 -3  4  4]    log(p_nb)
+    //                                                   log(p_nc)]
+    // And then it is simple to determine the frequencies from these values.
+    // Huge thanks to Sakul for a lot of this.
+
     int w_o = w_tot - w_a - w_b - w_c - w_ab - w_ac - w_bc - w_abc;
 
-    if (w_a + w_o == 0)  f_a = 0;
-    else  f_a = (double)w_a / (w_a+w_o);
-    if (w_b + w_o == 0)  f_b = 0;
-    else  f_b = (double)w_b / (w_b+w_o);
-    if (w_c + w_o == 0)  f_c = 0;
-    else  f_c = (double)w_c / (w_c+w_o);
+    double log_po, log_pnbc, log_pnac, log_pnab, log_pna, log_pnb, log_pnc;
+    double log_na, log_nb, log_nc, log_nab, log_nac, log_nbc;
+    
+    log_po = log((double)w_o/w_tot);
+    log_pnbc = log((w_o+w_a)/(double)w_tot);
+    log_pnac = log((w_o+w_b)/(double)w_tot);
+    log_pnab = log((w_o+w_c)/(double)w_tot);
+    log_pna = log((w_o+w_b+w_c+w_bc)/(double)w_tot);
+    log_pnb = log((w_o+w_a+w_c+w_ac)/(double)w_tot);
+    log_pnc = log((w_o+w_a+w_b+w_ab)/(double)w_tot);
 
-    if (w_o + w_a + w_b + w_ab == 0)  f_ab = 0;
-    else  f_ab = max(0., ((double)w_ab / (w_o+w_a+w_b+w_ab) - f_a*f_b) / (1 - f_a*f_b));
-    if (w_o + w_a + w_c + w_ac == 0)  f_ac = 0;
-    else  f_ac = max(0., ((double)w_ac / (w_o+w_a+w_c+w_ac) - f_a*f_c) / (1 - f_a*f_c));
-    if (w_o + w_b + w_c + w_bc == 0)  f_bc = 0;
-    else  f_bc = max(0., ((double)w_bc / (w_o+w_b+w_c+w_bc) - f_b*f_c) / (1 - f_b*f_c));
+    log_na  = ( 5*log_po - 5*log_pnbc + 2*log_pnac + 2*log_pnab - 2*log_pna - 2*log_pnb - 2*log_pnc)/7;
+    log_nb  = ( 5*log_po + 2*log_pnbc - 5*log_pnac + 2*log_pnab - 2*log_pna - 2*log_pnb - 2*log_pnc)/7;
+    log_nc  = ( 5*log_po + 2*log_pnbc + 2*log_pnac - 5*log_pnab - 2*log_pna - 2*log_pnb - 2*log_pnc)/7;
+    log_nab = (-3*log_po + 3*log_pnbc + 3*log_pnac - 4*log_pnab + 4*log_pna + 4*log_pnb - 3*log_pnc)/7;
+    log_nac = (-3*log_po + 3*log_pnbc - 4*log_pnac + 3*log_pnab + 4*log_pna - 3*log_pnb + 4*log_pnc)/7;
+    log_nbc = (-3*log_po - 4*log_pnbc + 3*log_pnac + 3*log_pnab - 3*log_pna + 4*log_pnb + 4*log_pnc)/7;
+
+    f_a = max(0., 1 - exp(log_na));
+    f_b = max(0., 1 - exp(log_nb));
+    f_c = max(0., 1 - exp(log_nc));
+    f_ab = max(0., 1 - exp(log_nab));
+    f_ac = max(0., 1 - exp(log_nac));
+    f_bc = max(0., 1 - exp(log_nbc));
+
+
+//    if (w_a + w_o == 0)  f_a = 0;
+//    else  f_a = (double)w_a / (w_a+w_o);
+//    if (w_b + w_o == 0)  f_b = 0;
+//    else  f_b = (double)w_b / (w_b+w_o);
+//    if (w_c + w_o == 0)  f_c = 0;
+//    else  f_c = (double)w_c / (w_c+w_o);
+//
+//    double temp1, temp2, temp3;
+//    temp1 = (1 - (double)(w_a+w_ab+w_ac+w_abc)/w_tot)/(1 - f_a);
+//    temp2 = (1 - (double)(w_b+w_ab+w_bc+w_abc)/w_tot)/(1 - f_b);
+//    temp3 = (1 - (double)(w_c+w_ac+w_bc+w_abc)/w_tot)/(1 - f_c);
+//
+//    
+//    f_ab = 1 - sqrt(temp1*temp2/temp3);
+//    f_ac = 1 - sqrt(temp1*temp3/temp2);
+//    f_bc = 1 - sqrt(temp2*temp3/temp1);
+//    if (w_o + w_a + w_b + w_ab == 0)  f_ab = 0;
+//    else  f_ab = max(0., ((double)w_ab / (w_o+w_a+w_b+w_ab) - f_a*f_b) / (1 - f_a*f_b));
+//    if (w_o + w_a + w_c + w_ac == 0)  f_ac = 0;
+//    else  f_ac = max(0., ((double)w_ac / (w_o+w_a+w_c+w_ac) - f_a*f_c) / (1 - f_a*f_c));
+//    if (w_o + w_b + w_c + w_bc == 0)  f_bc = 0;
+//    else  f_bc = max(0., ((double)w_bc / (w_o+w_b+w_c+w_bc) - f_b*f_c) / (1 - f_b*f_c));
+
+    //if (w_ac==0 && w_bc==0 && w_b==0 && w_c==0)
+//        cout << w_abc << " " << w_ab << " " << w_ac << " " << w_bc << " " << w_a << " " << w_b << " " << w_c << " " << f_a << " " << f_b << " " << f_c << " " << f_ab << " " << f_ac << " " << f_bc << endl;
 
 }
 
@@ -305,6 +379,8 @@ void match_frequency(int w_ab,int w_a,int w_b,int w_tot,double& f_ab,double& f_a
 
     //f_ab = max(0.,1.-(1.-((double)(w_ab)/(double)(w_tot)))/(1.-f_a*f_b));
     f_ab = max(0.,(w_ab - f_a*f_b*w_tot) / ((1 - f_a*f_b)*w_tot));
+
+    //cout << w_ab << " " << w_a << " " << w_b << " " << f_ab << " " << f_a << " " << f_b << endl;
 }
 void match_frequency_dual(int w_abc, int w_ab, int w_ac, int w_bc, int w_a, int w_b, int w_c, int w_tot, double &f_abc, double &f_ab, double &f_ac, double &f_bc, double &f_a, double &f_b, double &f_c) {
     int w_o = w_tot - w_a - w_b - w_c - w_ab - w_ac - w_bc - w_abc;
@@ -318,13 +394,17 @@ void match_frequency_dual(int w_abc, int w_ab, int w_ac, int w_bc, int w_a, int 
 
     if (w_o + w_a + w_b + w_ab == 0)  f_ab = 0;
     else  f_ab = max(0., ((double)w_ab / (w_o+w_a+w_b+w_ab) - f_a*f_b) / (1 - f_a*f_b));
+    //else  f_ab = ( ((double)w_ab / (w_o+w_a+w_b+w_ab) - f_a*f_b) / (1 - f_a*f_b));
     if (w_o + w_a + w_c + w_ac == 0)  f_ac = 0;
     else  f_ac = max(0., ((double)w_ac / (w_o+w_a+w_c+w_ac) - f_a*f_c) / (1 - f_a*f_c));
+    //else  f_ac = ( ((double)w_ac / (w_o+w_a+w_c+w_ac) - f_a*f_c) / (1 - f_a*f_c));
     if (w_o + w_b + w_c + w_bc == 0)  f_bc = 0;
     else  f_bc = max(0., ((double)w_bc / (w_o+w_b+w_c+w_bc) - f_b*f_c) / (1 - f_b*f_c));
+    //else  f_bc = ( ((double)w_bc / (w_o+w_b+w_c+w_bc) - f_b*f_c) / (1 - f_b*f_c));
 
     double f_false_abc = f_ab*(f_ac + (1-f_ac)*(f_bc + (1-f_bc)*f_c)) + (1-f_ab)*(f_ac*(f_bc + (1-f_bc)*f_b) + (1-f_ac)*(f_bc*f_a + (1-f_bc)*f_a*f_b*f_c));
     f_abc = max(0., ((double)w_abc / w_tot - f_false_abc) / (1 - f_false_abc));
+    //f_abc = ( ((double)w_abc / w_tot - f_false_abc) / (1 - f_false_abc));
 }
 
 // Instantaneous probability for nonmatch instance
@@ -362,13 +442,18 @@ double nonmatch_probability_dual(int w_abc, int w_ab, int w_ac, int w_bc, int w_
     n_ab = 1-f_ab; n_ac = 1-f_ac; n_bc = 1-f_bc; n_a = 1-f_a; n_b = 1-f_b; n_c = 1-f_c;
     double p_abc, p_ab, p_ac, p_bc, p_a, p_b, p_c, p_o;
     p_abc = f_ab*(f_ac + n_ac*f_bc + n_ac*n_bc*f_c) + n_ab*(f_ac*(f_bc + n_bc*f_b) + n_ac*(f_bc*f_a + n_bc*f_a*f_b*f_c));
-    p_ab = n_ac*n_bc*(f_ab + n_ab*f_a*f_b);
-    p_ac = n_ab*n_bc*(f_ac + n_ac*f_a*f_c);
-    p_bc = n_ab*n_ac*(f_bc + n_bc*f_b*f_c);
+    p_ab = n_ac*n_bc*n_c*(f_ab + n_ab*f_a*f_b);
+    p_ac = n_ab*n_bc*n_b*(f_ac + n_ac*f_a*f_c);
+    p_bc = n_ab*n_ac*n_a*(f_bc + n_bc*f_b*f_c);
     p_a = n_ab*n_ac*n_bc*f_a*n_b*n_c;
     p_b = n_ab*n_ac*n_bc*n_a*f_b*n_c;
     p_c = n_ab*n_ac*n_bc*n_a*n_b*f_c;
     p_o = n_ab*n_ac*n_bc*n_a*n_b*n_c;
+
+    //if (w_ac==0 && w_bc==0 && w_b==0 && w_c==0)
+        //cout << w_abc << " " << w_ab << " " << w_ac << " " << w_bc << " " << w_a << " " << w_b << " " << w_c << " | " << f_a << " " << f_b << " " << f_c << " " << f_ab << " " << f_ac << " " << f_bc << " | " << p_abc << " " << p_ab << " " << p_ac << " " << p_bc << endl;
+//        cout << w_abc << " " << w_ab << " " << w_ac << " " << w_bc << " " << w_a << " " << w_b << " " << w_c << " | " << p_abc*w_tot << " " << p_ab*w_tot  << " " << p_ac*w_tot  << " " << p_bc*w_tot << " " << p_a*w_tot << " " << p_b*w_tot << " " << p_c*w_tot  << " | " << f_a << " " << f_b << " " << f_c << " " << f_ab << " " << f_ac << " " << f_bc << endl;
+
     return multinomial_prob8(w_abc, w_ab, w_ac, w_bc, w_a, w_b, w_c, w_tot-w_abc-w_ab-w_bc-w_a-w_b-w_c, p_abc, p_ab, p_ac, p_bc, p_a, p_b, p_c, p_o);
 }
 
@@ -399,6 +484,9 @@ double match_probability_dual(int w_abc,int w_ab, int w_ac, int w_bc, int w_a,in
     p_b = n_abc*n_ab*n_ac*n_bc*n_a*f_b*n_c;
     p_c = n_abc*n_ab*n_ac*n_bc*n_a*n_b*f_c;
     p_o = n_abc*n_ab*n_ac*n_bc*n_a*n_b*n_c;
+
+    //cout << w_abc << " " << p_abc << " " << w_ab << " " << p_ab << " " << w_ac << " " << p_ac << " " << w_bc << " " << p_bc << " " << w_a << " " << p_a << " " << w_b << " " << p_b << " " << w_c << " " << p_c << endl;
+
     double prob = multinomial_prob8(w_abc, w_ab, w_ac, w_bc, w_a, w_b, w_c, w_tot-w_abc-w_ab-w_ac-w_bc-w_a-w_b-w_c, p_abc, p_ab, p_ac, p_bc, p_a, p_b, p_c, p_o);
     return prob;   
 }
@@ -431,7 +519,7 @@ void match_score_dual(int w_abc,int w_ab, int w_ac, int w_bc, int w_a,int w_b, i
 {
     // Calculates the match score for the chains a, b, and c
     // If there are three or fewer matches, its unlikely to be real
-    if ( w_ab <= 3 ){
+    if ( w_abc <= 3 ){
         score = 0.f;
         freq = 0.f;
     }
@@ -442,7 +530,9 @@ void match_score_dual(int w_abc,int w_ab, int w_ac, int w_bc, int w_a,int w_b, i
         double nmp = nonmatch_probability_dual(w_abc, w_ab, w_ac, w_bc,w_a,w_b, w_c,w_tot);
         match_frequency_dual(w_abc,w_ab,w_ac, w_bc,w_a,w_b,w_c,w_tot,freq,f_ab,f_ac,f_bc,f_a,f_b,f_c);
         score = log10(mp) - log10(nmp);
-        //cout << w_abc << " " << w_ab << " " << w_ac << " " << w_bc << " " << w_a << " " << w_b << " " << w_c << " " << mp << " " << nmp << " " << score << endl;
+        //if (freq==0)  score = -numeric_limits<double>::infinity();
+        //if (isinf(score))
+        //  cout << w_abc << " " << w_ab << " " << w_ac << " " << w_bc << " " << w_a << " " << w_b << " " << w_c << " " << mp << " " << nmp << " " << score << endl;	
     }
 }
 

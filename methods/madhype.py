@@ -103,13 +103,13 @@ def try_chain_additions_multithread(init_chainsets, a_uniques, b_uniques, cores,
     # Collect and parse results
     lines = collect_results(cores)
 
-    cells, scores_dict, freqs_dict = [], {}, {}
+    cells, scores_dict, freqs_dict = set(), {}, {}
     for line in lines:
         a1,a2,b1,b2 = [int(v) for v in line[2:]]
         a = () if a1==-1 else (a1,) if a2==-1 else (a1,a2)
         b = () if b1==-1 else (b1,) if b2==-1 else (b1,b2)
         c = (a,b)
-        cells.append(c)
+        cells.add(c)
         scores_dict[c] = float(line[0])
         freqs_dict[c] = float(line[1])
     return cells, scores_dict, freqs_dict
@@ -139,8 +139,13 @@ def multithread_madhype(cores,data,args):
 
     # Run second pass (add alpha/beta chains to each chain pair to make duals)
     pass2_args = args + ['1', '1']
-    pass2_init = cells
-    try_chain_additions_multithread(pass2_init, a_uniques, b_uniques, cores, pass2_args)
+    pass2_init = list(cells)
+    p2_cells, p2_scores, p2_freqs = try_chain_additions_multithread(pass2_init, a_uniques, b_uniques, cores, pass2_args)
+    for alist,blist in p2_cells:
+        for c in [((a,),(b,)) for a in alist for b in blist]:  cells.discard(c)
+    cells |= p2_cells
+    scores_dict.update(p2_scores)
+    freqs_dict.update(p2_freqs)
 
     
      
@@ -151,7 +156,7 @@ def multithread_madhype(cores,data,args):
     # let us know how long everything took
     print 'Multithreaded C++ full implementation took {} seconds.\n'.format(datetime.now()-startTime)
 
-    return cells, scores_dict, freqs_dict
+    return list(cells), scores_dict, freqs_dict
 
 
 """
