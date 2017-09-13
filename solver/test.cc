@@ -806,7 +806,7 @@ int main(int argc, char *argv[])
     */
 
     // Output results to txt file
-    ofstream output_file("./results_" + to_string(index) + ".txt");
+    ofstream output_file("./solver/results_" + to_string(index) + ".txt");
     ostream_iterator<string> output_iterator(output_file, "\n");
     copy(results.begin(), results.end(), output_iterator); 
 

@@ -59,15 +59,31 @@ Important Functions
 '''
 
 def madhype_thread(args):
-    startTime = datetime.now() 
+    """ This function is what is executed each process """ 
+    '''
+    Arguments:
+        > args: list or tuple, consisting of (w_tot, threshold, process #)
+    '''
+    startTime = datetime.now() # start a timeer for processing
     os.system(os.getcwd() + '/solver/test ' + ' '.join(args))
-    print 'Thread-{} took {} seconds.\n'.format(args[-1],datetime.now()-startTime)
+    print 'Process-{} took {} seconds.\n'.format(args[-1],datetime.now()-startTime) # update on processing time
 
 
 def determine_core_usage(cores): 
-    if cores == 'max':
-        print 'Declared max CPU core usage ({})...'.format(multiprocessing.cpu_count())
-        return multiprocessing.cpu_count()
+    """ This function checks that declared core usage is approriate """
+    '''
+    Arguments:
+        > cores: string ('max') or int, number of processes that will be initialized
+                 not to be greater than the number of cores on CPU
+    '''
+    if type(cores) == str:
+        if cores.lower() == 'max': # check lower case name
+            print 'Declared max CPU core usage ({})...'.format(multiprocessing.cpu_count())
+            return multiprocessing.cpu_count()
+        else:
+            raise KeyError('cores string is not recognized ({})'.format(cores))
+    elif not type(cores) == int: 
+        raise TypeError('cores is of type <{}>, not type <{}>'.format(type(cores),'int'))
     elif multiprocessing.cpu_count() < cores:
         print 'Number of declared cores larger than detected, reducing usage {} -> {}'.format(
                 cores,multiprocessing.cpu_count())
@@ -162,11 +178,13 @@ def multithread_madhype(cores,data,args):
 """
 Compiles the results from multiple core outputs, returns a dictionary of results
 """
-def collect_results(core_count):
+def collect_results(core_count,skip_run=False):
     lines = []
+    if not skip_run: dirname = 'solver/'
+    else: dirname = 'saved_data/'+skip_run+'/'
     # get all the results into one list
     for i in xrange(core_count):
-        with open('results_{}.txt'.format(i+1),'r') as f:
+        with open(dirname + 'results_{}.txt'.format(i+1),'r') as f:
             lines += [l.strip().split('\t') for l in f.readlines()]
     # save in clean form 
     return lines
@@ -346,9 +364,30 @@ The Meat-and-Potatoes Function
 '''
 # Verbose: on range 0 to 9
 # Adjustment: refers to the prior distribution adjustment account for repertoire density error
-def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,repertoire_adjustment=False,cores='max'):
+# Input parameters:
+#   > skip_run: if False, everything will run as normal; if set to string, will dig for a folder in testing for data
+def solve(data,custom_params={}):
+
+    # TODO: I would eventually like to remove this declaration, and have the parameter dictionary passed always contain the defaults instead
+    # In the interim, this will do
+    # default parameters
+    default_params = {
+            'max_threshold':None,
+            'pair_threshold':2,
+            'verbose':0,
+            'real_data':False, 
+            'all_pairs':False,
+            'repertoire_adjustment':False,
+            'cores':'max', 
+            'skip_run':False
+            }
+
+    params = Parameters(default_params)
+
+    # included default parameters (TODO: again, I would like to eventually stay away from local namespace pollution, but until we switch all code this will do)
+    params.update(custom_params)
     
-    if verbose >= 5: silent = False
+    if params.verbose >= 5: silent = False
     else: silent = True
 
     w_tot = len(data.well_data)
@@ -361,7 +400,7 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,r
     a_wells = dict([(a_u,[]) for a_u in a_uniques])
     b_wells = dict([(b_u,[]) for b_u in b_uniques])
     
-    if verbose >= 1: print 'Starting reverse dictionary creation...'
+    if params.verbose >= 1: print 'Starting reverse dictionary creation...'
     
     # creates all the necessary images of the data
     for w,well in enumerate(data.well_data):
@@ -371,11 +410,13 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,r
     print ''
 
     # detect the appropriate amount of core usage
-    core_count = determine_core_usage(cores) # calls simple function to figure out core counts
+    core_count = determine_core_usage(params.cores) # calls simple function to figure out core counts
 
     # C++ embedding  
+    # old version where we were not using ratios
     new_thresh = -math.log10(1./pair_threshold - 1) if pair_threshold>0 else float('-inf')
     args = [str(w_tot),str(new_thresh)]
+    #args = [str(w_tot),str(params.pair_threshold)]
     
     startTime = datetime.now()
 
@@ -384,11 +425,12 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,r
 
     # First, do the necessary A/B pairs:
     passed_data = [a_uniques,b_uniques,a_wells,b_wells]
-    cells, scores_dict, freqs_dict = multithread_madhype(core_count,passed_data,args)
-    #lines_ab = collect_results(core_count)
+    params.skip_run:
+        cells, scores_dict, freqs_dict = multithread_madhype(core_count,passed_data,args)
+    #lines_ab = collect_results(core_count,params.skip_run)
 
     # TODO: Modify this to work with new results format
-    if repertoire_adjustment:
+    if params.repertoire_adjustment:
         # make histogram dictionaries for multiplicity adjustments
         counter_a = collections.Counter([len(wc) for wc in a_wells.values()])
         counter_b = collections.Counter([len(wc) for wc in b_wells.values()])
@@ -411,26 +453,27 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,r
         lines_ab = [[float(l[0]) + 1.0*(counter_a[len(a_wells[int(l[2])])] + counter_b[len(b_wells[int(l[3])])])] + l[1:] for l in lines_ab]
 
     # Next, consider doing A/A or B/B pairs
-#    if all_pairs:
-#        passed_data = [a_uniques,a_uniques,a_wells,b_wells]
-#        multithread_madhype(core_count,passed_data,args)
-#        lines_aa = collect_results(core_count)
-#
-#        passed_data = [a_uniques,b_uniques,a_wells,b_wells]
-#        multithread_madhype(core_count,passed_data,args)
-#        lines_bb = collect_results(core_count)
-#    else:
-#        lines_aa = []
-#        lines_bb = []
+    # TODO: This is not compatible with the new multithread_madhype()
+    if params.all_pairs:
+        passed_data = [a_uniques,a_uniques,a_wells,b_wells]
+        multithread_madhype(core_count,passed_data,args)
+        lines_aa = collect_results(core_count)
+
+        passed_data = [a_uniques,b_uniques,a_wells,b_wells]
+        multithread_madhype(core_count,passed_data,args)
+        lines_bb = collect_results(core_count)
+    else:
+        lines_aa = []
+        lines_bb = []
 
     # real data post-processing section
-    if real_data:
+    if params.real_data:
         # collect results in each core output file
         results = export_results(lines_ab,lines_aa,lines_bb)
         return results
 
     # non-so-real data post-processing
-    elif not real_data:
+    elif not params.real_data:
         # recalls real matches
         real_matches = data.metadata['cells']
 
@@ -444,16 +487,31 @@ def solve(data,pair_threshold = 0.99,verbose=0,real_data=False,all_pairs=False,r
         #compiler.add_results(aa_edges,aa_freqs,aa_scores,'AA')
         #compiler.add_results(bb_edges,bb_freqs,bb_scores,'BB')
         
-        if verbose >= 1: print 'Finished!'
+        if params.verbose >= 1: print 'Finished!'
         
         return compiler.export() 
     
     
 
-    '''
-    Scanning for alpha -> beta graph edges
-    '''
 
+class Parameters:
+    """ Creates a default set of analytical parameters, replaces with any input dictionary """ 
+    # use a dictionary to update class attributes
+    def update(self,params={}):
+        # makes params dictionary onto class attributes
+        print params
+        for key, value in params.items():
+            setattr(self, key, value)
+        # can apply checks afterward
+
+    # initialize class with default dictionary
+    def __init__(self,default_params,custom_params={}):
+        self.update(default_params)
+        self.model_parameters = default_params.keys()
+        self.update(custom_params)
+
+    def dict(self):
+        return self.__dict__
 
 
 
