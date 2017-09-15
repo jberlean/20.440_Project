@@ -141,7 +141,7 @@ class Performance:
             print "    Correctly identified: {} ({}%)".format(len(self.correct_dual_cells), 100.*len(self.correct_dual_cells)/len(self.dual_cells))
             print "    Incorrectly identified:", len(self.incorrect_dual_cells)
             if len(self.pred_dual_cells)>0:  print "    FDR: {}%".format(100.*len(self.incorrect_dual_cells)/len(self.pred_dual_cells))
- 
+
 
 
 
@@ -232,7 +232,8 @@ class Testing:
     
         if 'madhype' in self.solver_methods:
             startTime = datetime.now()
-            results['madhype'] = madhype.solve(self.data,pair_threshold=0.999,verbose=0) # not stringent
+            #results['madhype'] = madhype.solve(self.data,pair_threshold=0.999,verbose=0) # not stringent
+            results['madhype'] = madhype.solve(self.data) # not stringent
             print 'MAD-HYPE took {} seconds.\n'.format(datetime.now()-startTime)
 
         #if 'backup_madhype' in self.solver_methods:

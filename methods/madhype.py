@@ -414,9 +414,9 @@ def solve(data,custom_params={}):
 
     # C++ embedding  
     # old version where we were not using ratios
-    new_thresh = -math.log10(1./pair_threshold - 1) if pair_threshold>0 else float('-inf')
-    args = [str(w_tot),str(new_thresh)]
-    #args = [str(w_tot),str(params.pair_threshold)]
+    #new_thresh = -math.log10(1./pair_threshold - 1) if pair_threshold>0 else float('-inf')
+    #args = [str(w_tot),str(new_thresh)]
+    args = [str(w_tot),str(params.pair_threshold)]
     
     startTime = datetime.now()
 
@@ -425,7 +425,7 @@ def solve(data,custom_params={}):
 
     # First, do the necessary A/B pairs:
     passed_data = [a_uniques,b_uniques,a_wells,b_wells]
-    params.skip_run:
+    if not params.skip_run:
         cells, scores_dict, freqs_dict = multithread_madhype(core_count,passed_data,args)
     #lines_ab = collect_results(core_count,params.skip_run)
 
