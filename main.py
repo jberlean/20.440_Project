@@ -30,7 +30,7 @@ from datetime import datetime
 import numpy as np
 
 # personal libraries
-from methods import * # libraries: madhype,alphabetr,pairseq,backup_madhype
+from methods import * # libraries: madhype,alphabetr,pairseq,backup_madhype,madhype_python
 from graphers import * # libraries: graphical_tools
 from datasim import * # libaries: seq_data,seq_generator
 
@@ -45,6 +45,8 @@ def main():
     test = Testing()
     test.solve()
     test.probe()
+
+    return test
 
 
 '''
@@ -153,7 +155,7 @@ class Testing:
         # basically every parameter defined in one dictionary
         default_params = {
                          ### Solver Parameters ###
-                         'solver_methods':['madhype','backup_madhype','alphabetr'],
+                         'solver_methods':['madhype','madhype_python', 'backup_madhype','alphabetr'],
                          ### Experimental Parameters ###
                          'well_total':96,
                          'cell_per_well_distribution':'constant', # distribution of cells in each well
@@ -233,8 +235,13 @@ class Testing:
         if 'madhype' in self.solver_methods:
             startTime = datetime.now()
             #results['madhype'] = madhype.solve(self.data,pair_threshold=0.999,verbose=0) # not stringent
-            results['madhype'] = madhype.solve(self.data) # not stringent
+            results['madhype'] = madhype.solve(self.data, {'pair_threshold':0.}) # not stringent
             print 'MAD-HYPE took {} seconds.\n'.format(datetime.now()-startTime)
+
+        if 'madhype_python' in self.solver_methods:
+            startTime = datetime.now()
+            results['madhype_python'] = madhype_python.solve(self.data, {'pair_threshold':0.}) # not stringent
+            print 'MAD-HYPE (python) took {} seconds.\n'.format(datetime.now()-startTime)
 
         #if 'backup_madhype' in self.solver_methods:
         #    startTime = datetime.now()
@@ -259,12 +266,12 @@ class Testing:
          
         #graphical_tools.graphical_data_summary(self.data,self.results) 
 
-        graphical_tools.graphical_auroc(self.results[0], self.results[0], self.data)
+        graphical_tools.graphical_auroc(self.results[0], self.results[1], self.data)
 
             
 
 if __name__ == '__main__':
 
-    main()
+    test = main()
 
 

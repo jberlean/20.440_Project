@@ -182,7 +182,8 @@ def graphical_auroc(results1,results2,seqdata):
     thresh1,thresh2 = results1['threshold'],results2['threshold']
 
     pos_count = len(hits)
-    neg_count = max(len(set(guess1)-set(hits)), len(set(guess2)-set(hits)))
+    #neg_count = max(len(set(guess1)-set(hits)), len(set(guess2)-set(hits)))
+    neg_count = len(obs_alphas)*len(obs_betas)*(1 + len(obs_alphas) + len(obs_betas)) - len(hits)
 
     #pos_count1,pos_count2 = len([g for g in guess1 if g in hits]),len([g for g in guess2 if g in hits])
     #neg_count1,neg_count2 = len(guess1)-pos_count1,len(guess2)-pos_count2
@@ -190,8 +191,8 @@ def graphical_auroc(results1,results2,seqdata):
     
     #lims = np.arange(1.,0.,-0.001)
     
-    x1,y1 = [0],[0]
-    x2,y2 = [0],[0]
+    #x1,y1 = [0],[0]
+    #x2,y2 = [0],[0]
     
     #for lim in lims:
 #        # check for set 1
@@ -222,28 +223,49 @@ def graphical_auroc(results1,results2,seqdata):
 
     
     
-    print 'Start 1:'
-    for x,y in zip(x1,y1)[-10:]:
-        print x,y
-    print 'Start 2:'
-    for x,y in zip(x2,y2)[-10:]:
-        print x,y
+#    print 'Start 1:'
+#    for x,y in zip(x1,y1)[-10:]:
+#        print x,y
+#    print 'Start 2:'
+#    for x,y in zip(x2,y2)[-10:]:
+#        print x,y
     
     
     print 'Method 1 auROC: {}'.format(np.trapz(y1,x1))    
     print 'Method 2 auROC: {}'.format(np.trapz(y2,x2))
     
+    plt.ion()
+
     plt.figure(1)
+
+    x1_count = [v*neg_count for v in x1[:-1]]
+    y1_count = [v*pos_count for v in y1[:-1]]
+    x2_count = [v*neg_count for v in x2[:-1]]
+    y2_count = [v*pos_count for v in y2[:-1]]
+    plt.plot(x1_count,y1_count)
+    plt.plot(x2_count,y2_count)
+    plt.plot([0,1./9*max(y1_count+y2_count)], [0, max(y1_count+y2_count)], 'k--')
+    plt.plot([0,1./2*max(y1_count+y2_count)], [0, max(y1_count+y2_count)], 'k--')
+    plt.plot([0,max(y1_count+y2_count)], [0, max(y1_count+y2_count)], 'k--')
+    plt.xlim((0, max(x1_count+x2_count)))
+    plt.ylim((0, max(y1_count+y2_count)))
+    plt.xlabel('False positive count')
+    plt.ylabel('True positive count')
+    plt.legend(loc='best')
+
+    plt.figure(2)
+   
     plt.plot([0, 1], [0, 1], 'k--')
     plt.plot(x1,y1)
     plt.plot(x2,y2)
     plt.xlim((0.,1.))
     plt.ylim((0.,1.))
-    
     plt.xlabel('False positive rate')
     plt.ylabel('True positive rate')
     plt.title('ROC curve')
     plt.legend(loc='best')
+
+
     plt.show()
                     
                 

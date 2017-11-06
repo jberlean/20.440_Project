@@ -65,7 +65,7 @@ def madhype_thread(args):
         > args: list or tuple, consisting of (w_tot, threshold, process #)
     '''
     startTime = datetime.now() # start a timeer for processing
-    os.system(os.getcwd() + '/solver/test ' + ' '.join(args))
+    os.system('python ' + os.getcwd() + '/solver/test.py ' + ' '.join(args))
     print 'Process-{} took {} seconds.\n'.format(args[-1],datetime.now()-startTime) # update on processing time
 
 
@@ -92,6 +92,8 @@ def determine_core_usage(cores):
         return cores
 
 def try_chain_additions_multithread(init_chainsets, a_uniques, b_uniques, cores, args):
+    print args
+
     # Map alpha/beta chain ids to indices
     alpha_id_to_idx = {a: i for i,a in enumerate(a_uniques)}
     beta_id_to_idx = {b: i for i,b in enumerate(b_uniques)}
@@ -157,21 +159,25 @@ def multithread_madhype(cores,data,args_dict):
     pass1_thresh = base_thresh - (math.log10(pass1_prior) - math.log10(1-pass1_prior))
     pass1_args = [str(w_tot), str(pass1_thresh), '0', '1']
     pass1_init = [((a,),()) for a in a_uniques]
-    cells, scores_dict, freqs_dict = try_chain_additions_multithread(pass1_init, a_uniques, b_uniques, cores, pass1_args)
-    print "PASS 1: Found {} cells".format(len(cells))
+    p1_cells, p1_scores_dict, p1_freqs_dict = try_chain_additions_multithread(pass1_init, a_uniques, b_uniques, cores, pass1_args)
+
+    cells = set(p1_cells)
+    scores_dict = {c: s-pass1_thresh+base_thresh for c,s in p1_scores_dict.iteritems()}
+    freqs_dict = p1_freqs_dict.copy()
+    print "MADHYPE-PYTHON PASS 1: Found {} cells".format(len(p1_cells))
 
     # Run second pass (add alpha/beta chains to each chain pair to make duals)
-#    pass2_prior = .3/(len(a_uniques)*len(b_uniques))
+#    pass2_prior = .13/math.sqrt(len(a_uniques)*len(b_uniques))
 #    pass2_thresh = base_thresh - (math.log10(pass2_prior) - math.log10(1-pass2_prior))
 #    pass2_args = [str(w_tot), str(pass2_thresh), '1', '1']
 #    pass2_init = list(cells)
 #    p2_cells, p2_scores, p2_freqs = try_chain_additions_multithread(pass2_init, a_uniques, b_uniques, cores, pass2_args)
-#    pass1_cells = set(cells)
+
 #    for alist,blist in p2_cells:
 #        for c in [((a,),(b,)) for a in alist for b in blist]:  cells.discard(c)
-#    print "PASS 2: Discarded {} cells, added {} cells".format(len(pass1_cells - cells), len(p2_cells))
+#    print "MADHYPE-PYTHON PASS 2: Discarded {} cells, added {} cells".format(len(set(p1_cells) - cells), len(p2_cells))
 #    cells |= p2_cells
-#    scores_dict.update(p2_scores)
+#    scores_dict.update({c:s-pass2_thresh+base_thresh for c,s in p2_scores.iteritems()})
 #    freqs_dict.update(p2_freqs)
 
     
