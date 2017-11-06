@@ -220,7 +220,7 @@ class Testing:
         #    a_ind,b_ind = a_ind + a*r,b_ind + b*r
         #gen.cells = cells
         # Use SequencingGenerator's built-in cell generator (for slightly more realistic repertoire)
-        gen.cells = seq_generator.SequencingGenerator.generate_cells(sum(self.repertoire_cell_total), alpha_dual_prob=0.3, beta_dual_prob=0.0)
+        gen.cells = seq_generator.SequencingGenerator.generate_cells(sum(self.repertoire_cell_total), alpha_dual_prob=0.0, beta_dual_prob=0.0)
 
         ## Save data to a file
         self.data = gen.generate_data()
